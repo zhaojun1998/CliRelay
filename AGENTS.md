@@ -38,6 +38,10 @@
 
 回复或更新 GitHub issue/PR 评论时，必须保证评论正文按 Markdown 正常渲染：多段内容使用真实换行、列表和代码反引号；使用 `gh issue comment`、`gh pr comment`、`gh issue close --comment` 等命令时，优先使用 heredoc/临时文件/`--body-file -` 传入正文，或使用 shell 支持的真实换行字符串。严禁把 `\n` 当作普通字符写进评论，提交前应通过 `gh issue view --comments` 或 `gh pr view --comments` 抽查渲染文本是否正确。
 
+公开回复强制审核：以后任何 GitHub issue / PR / discussion / release note 等公开渠道的回复、评论、关闭说明、PR body、review comment，必须先把完整拟发布正文发给用户 review；只有用户明确回复同意后，才允许发送、更新或关闭。紧急撤回/编辑已经泄露的敏感信息时，可以直接做最小化撤敏操作，但不得新增公开信息，事后必须向用户说明。
+
+公开内容敏感信息红线：严禁在 GitHub issue / PR / discussion、commit/PR 文案、release note、公开日志摘要或用户可见回复中披露任何内部测试部署信息或个人隐私信息，包括但不限于测试域名/URL、服务器 IP、端口、SSH 命令、服务器名称、管理密钥/API Key、auth index、账号 ID、真实邮箱、配置目录、数据库路径、后台面板地址、只读验证用的内部端点。需要说明验证结果时，只能使用“内部测试环境”“测试部署”“管理端只读验证”“版本头已确认”等泛化表述；提交公开内容前必须主动自查并移除敏感字符串。
+
 常规修复流程应按上述分支规范推送到远端功能分支并合并到 `dev`，由用户确认后再进行部署。不要用“已经查明原因”“本地测试通过”“构建成功”作为自动部署的理由。
 
 GitHub 仓库必须为 `main` 和 `dev` 开启分支保护：要求通过 Pull Request 合并、保护规则应用到管理员、禁止 force push、禁止删除分支。若发现保护规则缺失或被关闭，先恢复保护规则，再继续开发流程。
