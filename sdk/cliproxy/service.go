@@ -972,6 +972,7 @@ func (s *Service) registerModelsForAuth(ctx context.Context, a *coreauth.Auth) {
 							Type:        "openai-compatibility",
 							DisplayName: modelID,
 							UserDefined: true,
+							OriginalID:  openAICompatOriginalModelID(m.Name, modelID),
 						})
 					}
 					// Register and return
@@ -1008,6 +1009,15 @@ func (s *Service) registerModelsForAuth(ctx context.Context, a *coreauth.Auth) {
 	}
 
 	GlobalModelRegistry().UnregisterClient(a.ID)
+}
+
+func openAICompatOriginalModelID(name, alias string) string {
+	name = strings.TrimSpace(name)
+	alias = strings.TrimSpace(alias)
+	if name == "" || alias == "" || strings.EqualFold(name, alias) {
+		return ""
+	}
+	return name
 }
 
 func (s *Service) resolveConfigClaudeKey(auth *coreauth.Auth) *config.ClaudeKey {
@@ -1431,6 +1441,9 @@ func buildConfigModels[T modelEntry](models []T, ownedBy, modelType string) []*M
 			DisplayName: display,
 			UserDefined: true,
 		}
+		if name != "" && !strings.EqualFold(name, alias) {
+			info.OriginalID = name
+		}
 		if name != "" {
 			if upstream := registry.LookupStaticModelInfo(name); upstream != nil && upstream.Thinking != nil {
 				info.Thinking = upstream.Thinking
@@ -1677,6 +1690,9 @@ func applyOAuthModelAlias(cfg *config.Config, provider, authKind string, models 
 			seen[aliasKey] = struct{}{}
 			clone := *model
 			clone.ID = mappedID
+			if clone.OriginalID == "" {
+				clone.OriginalID = id
+			}
 			if clone.Name != "" {
 				clone.Name = rewriteModelInfoName(clone.Name, id, mappedID)
 			}

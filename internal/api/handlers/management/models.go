@@ -29,12 +29,20 @@ type modelPathResponse struct {
 	Family string `json:"family"`
 }
 
+type modelOriginResponse struct {
+	ID       string `json:"id"`
+	Provider string `json:"provider,omitempty"`
+	Alias    bool   `json:"alias"`
+	Count    int    `json:"count,omitempty"`
+}
+
 type modelPathAvailabilityResponse struct {
-	ID      string              `json:"id"`
-	OwnedBy string              `json:"owned_by,omitempty"`
-	Kind    string              `json:"kind"`
-	Alias   bool                `json:"alias"`
-	Paths   []modelPathResponse `json:"paths"`
+	ID        string                `json:"id"`
+	OwnedBy   string                `json:"owned_by,omitempty"`
+	Kind      string                `json:"kind"`
+	Alias     bool                  `json:"alias"`
+	Originals []modelOriginResponse `json:"originals,omitempty"`
+	Paths     []modelPathResponse   `json:"paths"`
 }
 
 type modelPathRouteResponse struct {
@@ -159,6 +167,30 @@ func appendModelPaths(
 			seen[key] = struct{}{}
 		}
 	}
+}
+
+func modelOriginResponses(origins []registry.ModelOrigin) ([]modelOriginResponse, bool) {
+	if len(origins) == 0 {
+		return nil, false
+	}
+	out := make([]modelOriginResponse, 0, len(origins))
+	hasAlias := false
+	for _, origin := range origins {
+		id := strings.TrimSpace(origin.ID)
+		if id == "" {
+			continue
+		}
+		if origin.Alias {
+			hasAlias = true
+		}
+		out = append(out, modelOriginResponse{
+			ID:       id,
+			Provider: strings.TrimSpace(origin.Provider),
+			Alias:    origin.Alias,
+			Count:    origin.Count,
+		})
+	}
+	return out, hasAlias
 }
 
 func modelPathStringValue(value any) string {
@@ -435,6 +467,7 @@ func (h *Handler) GetModels(c *gin.Context) {
 func (h *Handler) GetModelPathAvailability(c *gin.Context) {
 	modelRegistry := registry.GetGlobalRegistry()
 	items := make(map[string]*modelPathAvailabilityResponse)
+	origins := modelRegistry.GetModelOrigins()
 
 	rootOpenAICapabilities := openAIV1Capabilities("/")
 	rootGeminiCapabilities := geminiV1BetaCapabilities("/")
@@ -467,6 +500,10 @@ func (h *Handler) GetModelPathAvailability(c *gin.Context) {
 
 	data := make([]modelPathAvailabilityResponse, 0, len(items))
 	for _, item := range items {
+		if itemOrigins, hasAlias := modelOriginResponses(origins[item.ID]); len(itemOrigins) > 0 {
+			item.Originals = itemOrigins
+			item.Alias = hasAlias
+		}
 		sort.Slice(item.Paths, func(i, j int) bool {
 			if item.Paths[i].Scope != item.Paths[j].Scope {
 				return item.Paths[i].Scope < item.Paths[j].Scope

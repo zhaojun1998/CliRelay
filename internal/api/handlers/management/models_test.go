@@ -235,6 +235,87 @@ func TestModelOwnerPresetHandlersReplacePresets(t *testing.T) {
 	}
 }
 
+func TestModelPathAvailabilityIncludesAliasOriginals(t *testing.T) {
+	reg := registry.GetGlobalRegistry()
+	const modelID = "claude-opus-4-6"
+	const aliasClientID = "test-alias-origin-client"
+	const directClientID = "test-direct-origin-client"
+	t.Cleanup(func() {
+		reg.UnregisterClient(aliasClientID)
+		reg.UnregisterClient(directClientID)
+	})
+
+	reg.RegisterClient(aliasClientID, "claude", []*registry.ModelInfo{{
+		ID:         modelID,
+		Object:     "model",
+		OwnedBy:    "anthropic",
+		Type:       "claude",
+		OriginalID: "mimo-v2.5-pro",
+	}})
+	reg.RegisterClient(directClientID, "claude", []*registry.ModelInfo{{
+		ID:      modelID,
+		Object:  "model",
+		OwnedBy: "anthropic",
+		Type:    "claude",
+	}})
+
+	h := NewHandler(&config.Config{}, "", nil)
+	rec := performModelsRequest(http.MethodGet, "/model-path-availability", nil, h.GetModelPathAvailability)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GetModelPathAvailability status = %d body = %s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Data []struct {
+			ID        string `json:"id"`
+			Alias     bool   `json:"alias"`
+			Originals []struct {
+				ID       string `json:"id"`
+				Provider string `json:"provider"`
+				Alias    bool   `json:"alias"`
+			} `json:"originals"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal path availability response: %v", err)
+	}
+
+	var found *struct {
+		ID        string `json:"id"`
+		Alias     bool   `json:"alias"`
+		Originals []struct {
+			ID       string `json:"id"`
+			Provider string `json:"provider"`
+			Alias    bool   `json:"alias"`
+		} `json:"originals"`
+	}
+	for i := range payload.Data {
+		if payload.Data[i].ID == modelID {
+			found = &payload.Data[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected %s in model path availability response", modelID)
+	}
+	if !found.Alias {
+		t.Fatalf("expected %s to be marked as alias-aware", modelID)
+	}
+
+	originals := map[string]bool{}
+	for _, original := range found.Originals {
+		if original.Provider == "claude" {
+			originals[original.ID] = original.Alias
+		}
+	}
+	if alias, ok := originals["mimo-v2.5-pro"]; !ok || !alias {
+		t.Fatalf("expected alias original mimo-v2.5-pro, got %+v", found.Originals)
+	}
+	if alias, ok := originals[modelID]; !ok || alias {
+		t.Fatalf("expected direct original %s, got %+v", modelID, found.Originals)
+	}
+}
+
 func TestGetModelPathAvailabilityIncludesRootAndConfiguredPath(t *testing.T) {
 	modelID := "model-path-availability-test"
 	reg := registry.GetGlobalRegistry()

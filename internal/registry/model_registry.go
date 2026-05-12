@@ -56,6 +56,8 @@ type ModelInfo struct {
 	// array (e.g., openai-compatibility.*.models[], *-api-key.models[]).
 	// UserDefined models have thinking configuration passed through without validation.
 	UserDefined bool `json:"-"`
+	// OriginalID is the upstream model ID used when ID is a client-facing alias.
+	OriginalID string `json:"-"`
 }
 
 // ThinkingSupport describes a model family's supported internal reasoning budget range.
@@ -90,6 +92,14 @@ type ModelRegistration struct {
 	Providers map[string]int
 	// SuspendedClients tracks temporarily disabled clients keyed by client ID
 	SuspendedClients map[string]string
+}
+
+// ModelOrigin describes a possible upstream model behind a client-visible model ID.
+type ModelOrigin struct {
+	ID       string
+	Provider string
+	Alias    bool
+	Count    int
 }
 
 // ModelRegistryHook provides optional callbacks for external integrations to track model list changes.
@@ -967,6 +977,74 @@ func (r *ModelRegistry) GetModelProviders(modelID string) []string {
 		result = append(result, item.name)
 	}
 	return result
+}
+
+// GetModelOrigins returns possible upstream model IDs for each client-visible model ID.
+func (r *ModelRegistry) GetModelOrigins() map[string][]ModelOrigin {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	type originKey struct {
+		original string
+		provider string
+		alias    bool
+	}
+
+	grouped := make(map[string]map[originKey]int)
+	for clientID, modelIDs := range r.clientModels {
+		if len(modelIDs) == 0 {
+			continue
+		}
+		provider := strings.TrimSpace(r.clientProviders[clientID])
+		clientInfos := r.clientModelInfos[clientID]
+		for _, modelID := range modelIDs {
+			modelID = strings.TrimSpace(modelID)
+			if modelID == "" {
+				continue
+			}
+			originalID := modelID
+			if clientInfos != nil {
+				if info := clientInfos[modelID]; info != nil {
+					if original := strings.TrimSpace(info.OriginalID); original != "" {
+						originalID = original
+					}
+				}
+			}
+			key := originKey{
+				original: originalID,
+				provider: provider,
+				alias:    !strings.EqualFold(originalID, modelID),
+			}
+			if grouped[modelID] == nil {
+				grouped[modelID] = make(map[originKey]int)
+			}
+			grouped[modelID][key]++
+		}
+	}
+
+	out := make(map[string][]ModelOrigin, len(grouped))
+	for modelID, origins := range grouped {
+		list := make([]ModelOrigin, 0, len(origins))
+		for key, count := range origins {
+			list = append(list, ModelOrigin{
+				ID:       key.original,
+				Provider: key.provider,
+				Alias:    key.alias,
+				Count:    count,
+			})
+		}
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].Alias != list[j].Alias {
+				return list[i].Alias
+			}
+			if !strings.EqualFold(list[i].ID, list[j].ID) {
+				return strings.ToLower(list[i].ID) < strings.ToLower(list[j].ID)
+			}
+			return list[i].Provider < list[j].Provider
+		})
+		out[modelID] = list
+	}
+	return out
 }
 
 // GetModelInfo returns ModelInfo, prioritizing provider-specific definition if available.
