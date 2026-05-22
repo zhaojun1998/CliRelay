@@ -106,6 +106,45 @@ func TestPutAPIKeyPermissionProfilesRejectsMissingIdentity(t *testing.T) {
 	}
 }
 
+func TestPutAPIKeyPermissionProfilesPrunesUnknownChannelsBeforeSave(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupPermissionProfilesTestDB(t)
+
+	body := []byte(`[
+  {
+    "id": "standard",
+    "name": "Standard",
+    "allowed-channels": ["kimi-A", "kimi-B"]
+  }
+]`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api-key-permission-profiles", bytes.NewReader(body))
+
+	h := NewHandler(&config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{
+			{Name: "kimi-B", BaseURL: "https://example.invalid"},
+		},
+	}, "", nil)
+	h.PutAPIKeyPermissionProfiles(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	profiles := usage.ListAPIKeyPermissionProfiles()
+	if len(profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1", len(profiles))
+	}
+	if containsString(profiles[0].AllowedChannels, "kimi-A") {
+		t.Fatalf("allowed-channels = %v, should not keep unknown channel", profiles[0].AllowedChannels)
+	}
+	if !containsString(profiles[0].AllowedChannels, "kimi-B") {
+		t.Fatalf("allowed-channels = %v, should keep known channel", profiles[0].AllowedChannels)
+	}
+}
+
 func TestPatchAPIKeyEntryPersistsPermissionProfileID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupPermissionProfilesTestDB(t)

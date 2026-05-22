@@ -86,3 +86,88 @@ func TestPatchAPIKeyEntryRejectsChangingToExistingKey(t *testing.T) {
 		t.Fatalf("target key changed unexpectedly: %#v", got)
 	}
 }
+
+func TestPutAPIKeyEntriesPrunesUnknownChannelsBeforeSave(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupAPIKeyEntriesTestDB(t)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(
+		http.MethodPut,
+		"/api-key-entries",
+		bytes.NewReader([]byte(`[{
+      "key": "sk-prune-stale-channel",
+      "name": "Prune Stale Channel",
+      "allowed-channels": ["kimi-A", "kimi-B"]
+    }]`)),
+	)
+
+	h := NewHandler(&config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{
+			{Name: "kimi-B", BaseURL: "https://example.invalid"},
+		},
+	}, "", nil)
+	h.PutAPIKeyEntries(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	got := usage.GetAPIKey("sk-prune-stale-channel")
+	if got == nil {
+		t.Fatal("expected API key after PUT")
+	}
+	if containsString(got.AllowedChannels, "kimi-A") {
+		t.Fatalf("allowed-channels = %v, should not keep unknown channel", got.AllowedChannels)
+	}
+	if !containsString(got.AllowedChannels, "kimi-B") {
+		t.Fatalf("allowed-channels = %v, should keep known channel", got.AllowedChannels)
+	}
+}
+
+func TestPatchAPIKeyEntryPrunesUnknownChannelsBeforeSave(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupAPIKeyEntriesTestDB(t)
+
+	if err := usage.UpsertAPIKey(usage.APIKeyRow{
+		Key:             "sk-patch-prune",
+		Name:            "Patch Prune",
+		AllowedChannels: []string{"kimi-A", "kimi-B"},
+	}); err != nil {
+		t.Fatalf("UpsertAPIKey: %v", err)
+	}
+
+	body := []byte(`{
+  "match": "sk-patch-prune",
+  "value": {
+    "allowed-channels": ["kimi-A", "kimi-B"]
+  }
+}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api-key-entries", bytes.NewReader(body))
+
+	h := NewHandler(&config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{
+			{Name: "kimi-B", BaseURL: "https://example.invalid"},
+		},
+	}, "", nil)
+	h.PatchAPIKeyEntry(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	got := usage.GetAPIKey("sk-patch-prune")
+	if got == nil {
+		t.Fatal("expected API key after PATCH")
+	}
+	if containsString(got.AllowedChannels, "kimi-A") {
+		t.Fatalf("allowed-channels = %v, should not keep unknown channel", got.AllowedChannels)
+	}
+	if !containsString(got.AllowedChannels, "kimi-B") {
+		t.Fatalf("allowed-channels = %v, should keep known channel", got.AllowedChannels)
+	}
+}

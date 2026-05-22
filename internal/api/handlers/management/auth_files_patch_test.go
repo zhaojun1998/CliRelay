@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 )
 
@@ -829,6 +830,17 @@ func TestPatchAuthFileFieldsClearsSubscriptionExpiration(t *testing.T) {
 
 func TestPatchAuthFileFieldsRenamesRoutingChannelReferences(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	setupPermissionProfilesTestDB(t)
+
+	if err := usage.ReplaceAllAPIKeyPermissionProfiles([]usage.APIKeyPermissionProfileRow{
+		{
+			ID:              "standard",
+			Name:            "Standard",
+			AllowedChannels: []string{"Team Old", "Other Channel"},
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceAllAPIKeyPermissionProfiles: %v", err)
+	}
 
 	store := &memoryAuthStore{}
 	manager := coreauth.NewManager(store, nil, nil)
@@ -912,6 +924,16 @@ func TestPatchAuthFileFieldsRenamesRoutingChannelReferences(t *testing.T) {
 	}
 	if !containsString(h.cfg.APIKeyEntries[0].AllowedChannels, "Team New") {
 		t.Fatalf("allowed-channels = %v, want renamed channel", h.cfg.APIKeyEntries[0].AllowedChannels)
+	}
+	profiles := usage.ListAPIKeyPermissionProfiles()
+	if len(profiles) != 1 {
+		t.Fatalf("profiles len = %d, want 1", len(profiles))
+	}
+	if !containsString(profiles[0].AllowedChannels, "Team New") {
+		t.Fatalf("profile allowed-channels = %v, want renamed channel", profiles[0].AllowedChannels)
+	}
+	if containsString(profiles[0].AllowedChannels, "Team Old") {
+		t.Fatalf("profile allowed-channels = %v, should not keep old channel", profiles[0].AllowedChannels)
 	}
 }
 

@@ -1182,6 +1182,7 @@ func (h *Handler) DeleteAuthFile(c *gin.Context) {
 					full = abs
 				}
 			}
+			deletedChannels := deletedAuthChannelIdentifiers(h.findAuthByNameOrID(name))
 			if err = os.Remove(full); err == nil {
 				if errDel := h.deleteTokenRecord(ctx, full); errDel != nil {
 					c.JSON(500, gin.H{"error": errDel.Error()})
@@ -1189,6 +1190,10 @@ func (h *Handler) DeleteAuthFile(c *gin.Context) {
 				}
 				deleted++
 				h.disableAuth(ctx, full)
+				if errCleanup := h.removeChannelReferences(deletedChannels); errCleanup != nil {
+					c.JSON(500, gin.H{"error": errCleanup.Error()})
+					return
+				}
 			}
 		}
 		c.JSON(200, gin.H{"status": "ok", "deleted": deleted})
@@ -1205,6 +1210,7 @@ func (h *Handler) DeleteAuthFile(c *gin.Context) {
 			full = abs
 		}
 	}
+	deletedChannels := deletedAuthChannelIdentifiers(h.findAuthByNameOrID(name))
 	if err := os.Remove(full); err != nil {
 		if os.IsNotExist(err) {
 			c.JSON(404, gin.H{"error": "file not found"})
@@ -1218,7 +1224,47 @@ func (h *Handler) DeleteAuthFile(c *gin.Context) {
 		return
 	}
 	h.disableAuth(ctx, full)
+	if err := h.removeChannelReferences(deletedChannels); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(200, gin.H{"status": "ok"})
+}
+
+func (h *Handler) findAuthByNameOrID(name string) *coreauth.Auth {
+	if h == nil || h.authManager == nil {
+		return nil
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	if auth, ok := h.authManager.GetByID(name); ok {
+		return auth
+	}
+	for _, auth := range h.authManager.List() {
+		if auth == nil {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(auth.FileName), name) {
+			return auth
+		}
+		if path := strings.TrimSpace(authAttribute(auth, "path")); path != "" && strings.EqualFold(filepath.Base(path), name) {
+			return auth
+		}
+	}
+	return nil
+}
+
+func deletedAuthChannelIdentifiers(auth *coreauth.Auth) []string {
+	if auth == nil {
+		return nil
+	}
+	accountType, _ := auth.AccountInfo()
+	if !strings.EqualFold(accountType, "oauth") {
+		return nil
+	}
+	return auth.ChannelIdentifiers()
 }
 
 func (h *Handler) authIDForPath(path string) string {
