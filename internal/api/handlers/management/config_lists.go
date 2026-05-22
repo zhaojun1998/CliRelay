@@ -241,6 +241,12 @@ func (h *Handler) PutAPIKeyPermissionProfiles(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 			return
 		}
+		if cleaned, errClean := h.sanitizeAllowedChannelsForSave(profiles[idx].AllowedChannels); errClean != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errClean.Error()})
+			return
+		} else {
+			profiles[idx].AllowedChannels = cleaned
+		}
 	}
 
 	if err := usage.ReplaceAllAPIKeyPermissionProfiles(profiles); err != nil {
@@ -288,14 +294,13 @@ func (h *Handler) PutAPIKeyEntries(c *gin.Context) {
 		routingCfg = h.cfg.Routing
 	}
 	for _, entry := range arr {
-		entry.AllowedChannels = uniqueChannels(entry.AllowedChannels)
 		entry.AllowedChannelGroups = uniqueChannelGroups(entry.AllowedChannelGroups)
-		validated, errValidate := h.validateAllowedChannels(entry.AllowedChannels)
+		cleanedChannels, errValidate := h.sanitizeAllowedChannelsForSave(entry.AllowedChannels)
 		if errValidate != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errValidate.Error()})
 			return
 		}
-		entry.AllowedChannels = validated
+		entry.AllowedChannels = cleanedChannels
 		validatedGroups, errValidate := h.validateAllowedChannelGroups(entry.AllowedChannelGroups)
 		if errValidate != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errValidate.Error()})
@@ -423,7 +428,7 @@ func (h *Handler) PatchAPIKeyEntry(c *gin.Context) {
 		entry.AllowedModels = append([]string(nil), (*body.Value.AllowedModels)...)
 	}
 	if body.Value.AllowedChannels != nil {
-		validated, errValidate := h.validateAllowedChannels(*body.Value.AllowedChannels)
+		validated, errValidate := h.sanitizeAllowedChannelsForSave(*body.Value.AllowedChannels)
 		if errValidate != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errValidate.Error()})
 			return

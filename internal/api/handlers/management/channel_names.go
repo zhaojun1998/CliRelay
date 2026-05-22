@@ -301,10 +301,14 @@ func (h *Handler) validateAllowedChannels(values []string) ([]string, error) {
 		return nil, nil
 	}
 	var auths []*coreauth.Auth
+	var cfg *config.Config
+	if h != nil {
+		cfg = h.cfg
+	}
 	if h != nil && h.authManager != nil {
 		auths = h.authManager.List()
 	}
-	known, err := collectKnownChannels(h.cfg, auths, "")
+	known, err := collectKnownChannels(cfg, auths, "")
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +330,53 @@ func (h *Handler) validateAllowedChannels(values []string) ([]string, error) {
 		}
 		seen[canonicalKey] = struct{}{}
 		resolved = append(resolved, canonical)
+	}
+	return resolved, nil
+}
+
+func (h *Handler) sanitizeAllowedChannelsForSave(values []string) ([]string, error) {
+	normalized := uniqueChannels(values)
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+
+	var auths []*coreauth.Auth
+	var cfg *config.Config
+	if h != nil {
+		cfg = h.cfg
+	}
+	if h != nil && h.authManager != nil {
+		auths = h.authManager.List()
+	}
+	known, err := collectKnownChannels(cfg, auths, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(known) == 0 {
+		return h.validateAllowedChannels(normalized)
+	}
+
+	resolved := make([]string, 0, len(normalized))
+	seen := make(map[string]struct{}, len(normalized))
+	for _, value := range normalized {
+		key := strings.ToLower(strings.TrimSpace(value))
+		entry, exists := known[key]
+		if !exists {
+			continue
+		}
+		canonical := strings.TrimSpace(entry.Canonical)
+		if canonical == "" {
+			canonical = strings.TrimSpace(value)
+		}
+		canonicalKey := strings.ToLower(canonical)
+		if _, exists := seen[canonicalKey]; exists {
+			continue
+		}
+		seen[canonicalKey] = struct{}{}
+		resolved = append(resolved, canonical)
+	}
+	if len(resolved) == 0 {
+		return nil, nil
 	}
 	return resolved, nil
 }
