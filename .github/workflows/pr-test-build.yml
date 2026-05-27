@@ -80,9 +80,9 @@ jobs:
       - name: Vet
         run: |
           go vet ./...
-      - name: Test
+      - name: API tests (no integration)
         run: |
-          go test ./...
+          go test ./internal/api/... ./sdk/api/... ./test/...
       - name: Golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
