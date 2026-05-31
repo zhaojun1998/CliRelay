@@ -96,6 +96,10 @@ func (e *OpenCodeGoExecutor) Execute(ctx context.Context, auth *cliproxyauth.Aut
 		if opencodeGoNeedsReasoningInjection(req.Model) {
 			req.Payload = opencodeGoInjectComputerUseTools(req.Payload)
 		}
+		// Strip old base64 screenshots from tool result messages to save context.
+		if opencodeGoNeedsReasoningInjection(req.Model) {
+			req.Payload = opencodeGoStripScreenshots(req.Payload)
+		}
 	var resp cliproxyexecutor.Response
 	var err error
 	if opencodeGoUsesMessages(req.Model) {
@@ -135,6 +139,10 @@ func (e *OpenCodeGoExecutor) ExecuteStream(ctx context.Context, auth *cliproxyau
 		// so DeepSeek models don't see Computer Use capabilities.
 		if opencodeGoNeedsReasoningInjection(req.Model) {
 			req.Payload = opencodeGoInjectComputerUseTools(req.Payload)
+		}
+		// Strip old base64 screenshots from tool result messages to save context.
+		if opencodeGoNeedsReasoningInjection(req.Model) {
+			req.Payload = opencodeGoStripScreenshots(req.Payload)
 		}
 	var result *cliproxyexecutor.StreamResult
 	var err error
