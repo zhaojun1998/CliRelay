@@ -113,6 +113,15 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		}
 	}
 
+	// OpenCode-Go: the translator drops reasoning_content when converting
+	// from Responses API. Inject it here into translated payload so it survives.
+	if e.provider == openCodeGoProvider && opencodeGoNeedsReasoningInjection(baseModel) {
+		sessionID := opencodeGoSessionID(opts, auth)
+		if sessionID != "" {
+			translated = opencodeGoInjectMessagesArray(translated, req.Model, sessionID)
+		}
+	}
+
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
@@ -215,6 +224,14 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		translated, err = normalizeKimiToolMessageLinks(translated)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Inject reasoning_content for OpenCode-Go after Responses API translation.
+	if e.provider == openCodeGoProvider && opencodeGoNeedsReasoningInjection(baseModel) {
+		sessionID := opencodeGoSessionID(opts, auth)
+		if sessionID != "" {
+			translated = opencodeGoInjectMessagesArray(translated, req.Model, sessionID)
 		}
 	}
 

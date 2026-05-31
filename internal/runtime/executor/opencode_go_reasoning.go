@@ -295,3 +295,9 @@ func opencodeGoWrapStreamCacheReasoning(result *cliproxyexecutor.StreamResult, m
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: result.Headers, Chunks: out}
 }
+
+// opencodeGoInjectMessagesArray is a convenience wrapper that injects reasoning_content
+// into a Chat Completions format payload (messages array).
+func opencodeGoInjectMessagesArray(payload []byte, model, sessionID string) []byte {
+	return opencodeGoInjectReasoningContentIntoPayload(payload, model, sessionID)
+}
