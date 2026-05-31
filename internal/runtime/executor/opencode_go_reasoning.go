@@ -196,7 +196,9 @@ func opencodeGoInjectReasoningContentIntoPayload(payload []byte, model, sessionI
 	modified := false
 
 	// Find the LAST assistant message that is missing reasoning_content
-	// This is the message from the previous turn that needs injection
+	// This is the message from the previous turn that needs injection.
+	// DeepSeek checks ALL assistant messages including tool_call-only ones,
+	// so we inject empty reasoning_content for tool_call messages as well.
 	for i := len(msgs) - 1; i >= 0; i-- {
 		msg := msgs[i]
 		role := msg.Get("role").String()
@@ -207,18 +209,27 @@ func opencodeGoInjectReasoningContentIntoPayload(payload []byte, model, sessionI
 		if msg.Get("reasoning_content").Exists() && msg.Get("reasoning_content").String() != "" {
 			continue
 		}
-		// Skip pure tool_call messages
-		if msg.Get("tool_calls").Exists() && msg.Get("tool_calls").IsArray() &&
-			len(msg.Get("tool_calls").Array()) > 0 && msg.Get("content").String() == "" {
-			continue
+
+		// For tool_call-only assistant messages, inject empty reasoning_content
+		// to satisfy DeepSeek's thinking mode validation, then continue scanning
+		// for a non-tool assistant message to inject the cached content into.
+		isToolCall := msg.Get("tool_calls").Exists() && msg.Get("tool_calls").IsArray() &&
+			len(msg.Get("tool_calls").Array()) > 0 && msg.Get("content").String() == ""
+
+		content := reasoningContent
+		if isToolCall {
+			content = ""
 		}
+
 		path := fmt.Sprintf("messages.%d.reasoning_content", i)
 		var err error
-		payload, err = sjson.SetBytes(payload, path, reasoningContent)
+		payload, err = sjson.SetBytes(payload, path, content)
 		if err == nil {
 			modified = true
 		}
-		break
+		if !isToolCall {
+			break // Only stop after injecting into the last text assistant
+		}
 	}
 
 	if !modified {
@@ -245,13 +256,24 @@ func opencodeGoInjectInputArrayReasoning(payload []byte, model, content string) 
 		if item.Get("reasoning_content").Exists() && item.Get("reasoning_content").String() != "" {
 			continue
 		}
+
+		isToolCall := item.Get("tool_calls").Exists() && item.Get("tool_calls").IsArray() &&
+			len(item.Get("tool_calls").Array()) > 0 && item.Get("content").String() == ""
+
+		injectContent := content
+		if isToolCall {
+			injectContent = ""
+		}
+
 		path := fmt.Sprintf("input.%d.reasoning_content", i)
 		var err error
-		payload, err = sjson.SetBytes(payload, path, content)
+		payload, err = sjson.SetBytes(payload, path, injectContent)
 		if err == nil {
 			modified = true
 		}
-		break
+		if !isToolCall {
+			break
+		}
 	}
 	if !modified {
 		return payload
