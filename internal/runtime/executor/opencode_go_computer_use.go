@@ -324,3 +324,61 @@ func opencodeGoInjectComputerUseTools(payload []byte) []byte {
 
 	return payload
 }
+
+// opencodeGoStripScreenshots removes base64 image data from tool result messages
+// in the request payload. After the model processes a screenshot (via get_app_state),
+// the raw image data is no longer needed and wastes large amounts of context tokens.
+func opencodeGoStripScreenshots(payload []byte) []byte {
+	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+		return payload
+	}
+	payload = opencodeGoStripArrayScreenshots(payload, "messages")
+	payload = opencodeGoStripArrayScreenshots(payload, "input")
+	return payload
+}
+
+func opencodeGoStripArrayScreenshots(payload []byte, arrayPath string) []byte {
+	arr := gjson.GetBytes(payload, arrayPath)
+	if !arr.Exists() || !arr.IsArray() || len(arr.Array()) == 0 {
+		return payload
+	}
+	modified := false
+	items := arr.Array()
+	for i, item := range items {
+		if item.Get("role").String() != "tool" {
+			continue
+		}
+		content := item.Get("content")
+		if !content.Exists() {
+			continue
+		}
+		path := fmt.Sprintf("%s.%d.content", arrayPath, i)
+		if content.IsArray() {
+			parts := content.Array()
+			for j, part := range parts {
+				partType := part.Get("type").String()
+				if partType == "input_image" || partType == "image" || partType == "image_url" {
+					partPath := fmt.Sprintf("%s.%d.content.%d", arrayPath, i, j)
+					payload, _ = sjson.SetBytes(payload, partPath+".type", "text")
+					payload, _ = sjson.SetBytes(payload, partPath+".text", "[Screenshot from previous turn]")
+					_, _ = sjson.DeleteBytes(payload, partPath+".image_url")
+					modified = true
+				}
+			}
+		} else {
+			text := content.String()
+			if strings.HasPrefix(text, "data:image") || strings.HasPrefix(text, "[data:image") {
+				payload, _ = sjson.SetBytes(payload, path, "[Screenshot from previous turn]")
+				modified = true
+			} else if len(text) > 1000 && strings.Contains(text, "base64") {
+				payload, _ = sjson.SetBytes(payload, path, "[Screenshot from previous turn]")
+				modified = true
+			}
+		}
+	}
+	if !modified {
+		return payload
+	}
+	return payload
+}
+
