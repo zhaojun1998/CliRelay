@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -53,8 +54,10 @@ func purgeExpiredReasoningEntries() {
 }
 
 // opencodeGoSessionID extracts the session identifier from executor options.
-// Returns empty string if no session identifier is found.
-func opencodeGoSessionID(opts cliproxyexecutor.Options) string {
+// Falls back to the auth ID (which is unique per API key) when session headers
+// are not forwarded to the executor.
+// Returns empty string if no identifier is found at all.
+func opencodeGoSessionID(opts cliproxyexecutor.Options, auth *cliproxyauth.Auth) string {
 	if opts.Headers != nil {
 		if sessionID := opts.Headers.Get("Session-Id"); sessionID != "" {
 			return sessionID
@@ -67,6 +70,12 @@ func opencodeGoSessionID(opts cliproxyexecutor.Options) string {
 		if s, ok := raw.(string); ok {
 			return strings.TrimSpace(s)
 		}
+	}
+	// Fallback: use auth ID (unique per API key / user).
+	// The Session-Id header is not forwarded to executors in all code paths,
+	// but auth ID is always available.
+	if auth != nil && strings.TrimSpace(auth.ID) != "" {
+		return strings.TrimSpace(auth.ID)
 	}
 	return ""
 }

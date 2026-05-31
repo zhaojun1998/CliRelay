@@ -86,7 +86,7 @@ func (e *OpenCodeGoExecutor) Execute(ctx context.Context, auth *cliproxyauth.Aut
 	}
 
 	// Inject cached reasoning_content for models that need it (e.g., DeepSeek thinking mode).
-	sessionID := opencodeGoSessionID(opts)
+	sessionID := opencodeGoSessionID(opts, auth)
 	if opencodeGoNeedsReasoningInjection(req.Model) && sessionID != "" {
 		req.Payload = opencodeGoInjectReasoningContentIntoPayload(req.Payload, req.Model, sessionID)
 	}
@@ -121,7 +121,7 @@ func (e *OpenCodeGoExecutor) ExecuteStream(ctx context.Context, auth *cliproxyau
 		req = e.sanitizeHistoricalImagesForTextModel(req)
 	}
 	// Inject cached reasoning_content for models that need it (e.g., DeepSeek thinking mode).
-	sessionID := opencodeGoSessionID(opts)
+	sessionID := opencodeGoSessionID(opts, auth)
 	if opencodeGoNeedsReasoningInjection(req.Model) && sessionID != "" {
 		req.Payload = opencodeGoInjectReasoningContentIntoPayload(req.Payload, req.Model, sessionID)
 	}

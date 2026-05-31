@@ -56,7 +56,7 @@ func TestOpenCodeGoSessionID_FromHeaders(t *testing.T) {
 	headers := make(http.Header)
 	headers.Set("Session-Id", "sess_abc123")
 	opts := cliproxyexecutor.Options{Headers: headers}
-	if got := opencodeGoSessionID(opts); got != "sess_abc123" {
+	if got := opencodeGoSessionID(opts, nil); got != "sess_abc123" {
 		t.Errorf("opencodeGoSessionID = %q, want sess_abc123", got)
 	}
 }
@@ -65,7 +65,7 @@ func TestOpenCodeGoSessionID_FromFallbackHeader(t *testing.T) {
 	headers := make(http.Header)
 	headers.Set("X-Client-Request-Id", "req_xyz789")
 	opts := cliproxyexecutor.Options{Headers: headers}
-	if got := opencodeGoSessionID(opts); got != "req_xyz789" {
+	if got := opencodeGoSessionID(opts, nil); got != "req_xyz789" {
 		t.Errorf("opencodeGoSessionID = %q, want req_xyz789", got)
 	}
 }
@@ -76,7 +76,7 @@ func TestOpenCodeGoSessionID_FromMetadata(t *testing.T) {
 			cliproxyexecutor.ExecutionSessionMetadataKey: "meta_session_001",
 		},
 	}
-	if got := opencodeGoSessionID(opts); got != "meta_session_001" {
+	if got := opencodeGoSessionID(opts, nil); got != "meta_session_001" {
 		t.Errorf("opencodeGoSessionID = %q, want meta_session_001", got)
 	}
 }
@@ -86,15 +86,33 @@ func TestOpenCodeGoSessionID_PreferSessionIDOverClientRequest(t *testing.T) {
 	headers.Set("Session-Id", "primary_session")
 	headers.Set("X-Client-Request-Id", "secondary_req")
 	opts := cliproxyexecutor.Options{Headers: headers}
-	if got := opencodeGoSessionID(opts); got != "primary_session" {
+	if got := opencodeGoSessionID(opts, nil); got != "primary_session" {
 		t.Errorf("opencodeGoSessionID = %q, want primary_session", got)
 	}
 }
 
 func TestOpenCodeGoSessionID_Empty(t *testing.T) {
 	opts := cliproxyexecutor.Options{}
-	if got := opencodeGoSessionID(opts); got != "" {
+	if got := opencodeGoSessionID(opts, nil); got != "" {
 		t.Errorf("opencodeGoSessionID = %q, want empty", got)
+	}
+}
+
+func TestOpenCodeGoSessionID_FallbackToAuthID(t *testing.T) {
+	auth := &cliproxyauth.Auth{ID: "opencode-go:apikey:abc123"}
+	opts := cliproxyexecutor.Options{}
+	if got := opencodeGoSessionID(opts, auth); got != "opencode-go:apikey:abc123" {
+		t.Errorf("opencodeGoSessionID = %q, want opencode-go:apikey:abc123", got)
+	}
+}
+
+func TestOpenCodeGoSessionID_PreferSessionOverAuthID(t *testing.T) {
+	auth := &cliproxyauth.Auth{ID: "auth_id_fallback"}
+	headers := make(http.Header)
+	headers.Set("Session-Id", "session_id_preferred")
+	opts := cliproxyexecutor.Options{Headers: headers}
+	if got := opencodeGoSessionID(opts, auth); got != "session_id_preferred" {
+		t.Errorf("opencodeGoSessionID = %q, want session_id_preferred", got)
 	}
 }
 
