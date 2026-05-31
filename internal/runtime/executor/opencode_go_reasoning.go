@@ -177,10 +177,10 @@ func opencodeGoInjectReasoningContentIntoPayload(payload []byte, model, sessionI
 		return payload
 	}
 
+	// Try to fetch cached reasoning_content. When empty (new conversation,
+	// server restart), we still inject empty reasoning_content for ALL
+	// assistant messages — DeepSeek requires the field to exist.
 	reasoningContent := opencodeGoGetCachedReasoningContent(model, sessionID)
-	if reasoningContent == "" {
-		return payload
-	}
 
 	messages := gjson.GetBytes(payload, "messages")
 	if !messages.Exists() || !messages.IsArray() || len(messages.Array()) == 0 {
@@ -227,9 +227,7 @@ func opencodeGoInjectReasoningContentIntoPayload(payload []byte, model, sessionI
 		if err == nil {
 			modified = true
 		}
-		if !isToolCall {
-			break // Only stop after injecting into the last text assistant
-		}
+		// Continue scanning — DeepSeek checks ALL assistant messages.
 	}
 
 	if !modified {
@@ -271,9 +269,7 @@ func opencodeGoInjectInputArrayReasoning(payload []byte, model, content string) 
 		if err == nil {
 			modified = true
 		}
-		if !isToolCall {
-			break
-		}
+		// Continue scanning.
 	}
 	if !modified {
 		return payload

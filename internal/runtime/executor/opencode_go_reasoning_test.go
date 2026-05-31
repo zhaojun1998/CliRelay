@@ -363,8 +363,13 @@ func TestOpenCodeGoInjectReasoningContentNoCache(t *testing.T) {
 
 	payload := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"resp"}]}`)
 	got := opencodeGoInjectReasoningContentIntoPayload(payload, "deepseek-v4-flash", "sess_no_cache")
-	if string(got) != string(payload) {
-		t.Errorf("payload should not change when cache is empty")
+	// Even when cache is empty, we inject empty reasoning_content
+	// to satisfy DeepSeek's thinking mode validation.
+	if !gjson.GetBytes(got, "messages.1.reasoning_content").Exists() {
+		t.Error("should inject empty reasoning_content even when cache is empty")
+	}
+	if rc := gjson.GetBytes(got, "messages.1.reasoning_content").String(); rc != "" {
+		t.Errorf("reasoning_content should be empty string when cache is empty, got %q", rc)
 	}
 }
 
@@ -374,24 +379,24 @@ func TestOpenCodeGoInjectReasoningContentMultipleAssistants(t *testing.T) {
 
 	opencodeGoCacheReasoningContent("deepseek-v4-flash", "sess_multi", "cached reasoning")
 
-	payload := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"q1"},{"role":"assistant","content":"a1"},{"role":"user","content":"q2"},{"role":"assistant","content":"a2","tool_calls":[{"id":"call_1","type":"function","function":{"name":"test","arguments":"{}"}}]},{"role":"tool","content":"result","tool_call_id":"call_1"},{"role":"assistant","content":"a3"}]}`)
+	payload := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"q1"},{"role":"assistant","content":"a1"},{"role":"user","content":"q2"},{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"test","arguments":"{}"}}]},{"role":"tool","content":"result","tool_call_id":"call_1"},{"role":"assistant","content":"a3"}]}`)
 	got := opencodeGoInjectReasoningContentIntoPayload(payload, "deepseek-v4-flash", "sess_multi")
 
 	msgs := gjson.GetBytes(got, "messages").Array()
-	// Check that only the last assistant (without tool_calls and without existing reasoning_content) got injection
-	// Index 1 (a1) - not the last assistant (a3 at index 5 is), so should NOT get injection
-	if msgs[1].Get("reasoning_content").Exists() {
-		t.Errorf("assistant at index 1 should not get injection (only the last assistant gets it)")
+	// All assistant messages missing reasoning_content should get it injected.
+	// a1 (index 1) - text assistant, should get the cached reasoning_content
+	if rc := msgs[1].Get("reasoning_content").String(); rc != "cached reasoning" {
+		t.Errorf("assistant at index 1 should get cached reasoning_content, got %q", rc)
 	}
-	// Index 3 (a2 with tool_calls) - should NOT get injection (tool_calls + no content)
-	if msgs[3].Get("reasoning_content").Exists() {
-		t.Errorf("assistant with tool_calls should not get reasoning_content injection")
+	// a2 (index 3) - tool_call assistant, should get EMPTY reasoning_content
+	if rc := msgs[3].Get("reasoning_content").String(); rc != "" {
+		t.Errorf("assistant with tool_calls should get empty reasoning_content, got %q", rc)
 	}
-	// Index 5 (a3) - the last assistant, no tool_calls, no reasoning_content → should get injection
+	// a3 (index 5) - text assistant, should get the cached reasoning_content
 	if rc := msgs[5].Get("reasoning_content").String(); rc != "cached reasoning" {
-		t.Errorf("last assistant at index 5 should get injection, got %q", rc)
-	}
+		t.Errorf("last assistant at index 5 should get cached reasoning_content, got %q", rc)
 }
+	}
 
 func TestOpenCodeGoInjectReasoningContentPreservesModelName(t *testing.T) {
 	reasoningCache = sync.Map{}
