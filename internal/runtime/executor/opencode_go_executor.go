@@ -113,6 +113,8 @@ func (e *OpenCodeGoExecutor) Execute(ctx context.Context, auth *cliproxyauth.Aut
 		if opencodeGoNeedsReasoningInjection(req.Model) {
 			req.Payload = opencodeGoStripScreenshots(req.Payload)
 		}
+			// Strip orphaned tool_calls that strict upstreams reject.
+			req.Payload = opencodeGoStripOrphanedToolCalls(req.Payload)
 	var resp cliproxyexecutor.Response
 	var err error
 	if opencodeGoUsesMessages(req.Model) {
@@ -167,6 +169,8 @@ func (e *OpenCodeGoExecutor) ExecuteStream(ctx context.Context, auth *cliproxyau
 		if opencodeGoNeedsReasoningInjection(req.Model) {
 			req.Payload = opencodeGoStripScreenshots(req.Payload)
 		}
+			// Strip orphaned tool_calls that strict upstreams reject.
+			req.Payload = opencodeGoStripOrphanedToolCalls(req.Payload)
 	var result *cliproxyexecutor.StreamResult
 	var err error
 	if opencodeGoUsesMessages(req.Model) {
@@ -909,6 +913,68 @@ func (e *OpenCodeGoExecutor) requestLog(url string, req *http.Request, body []by
 		AuthValue: authValue,
 	}
 }
+
+
+// opencodeGoStripOrphanedToolCalls removes tool_calls from assistant messages
+// that are not followed by tool messages responding to them. Strict upstream
+// providers (e.g., DeepSeek) reject requests with unresolved tool_calls.
+func opencodeGoStripOrphanedToolCalls(payload []byte) []byte {
+	if !gjson.ValidBytes(payload) {
+		return payload
+	}
+	msgs := gjson.GetBytes(payload, "messages")
+	if !msgs.Exists() || !msgs.IsArray() || len(msgs.Array()) == 0 {
+		return payload
+	}
+
+	// Build a map of tool_call_ids that are resolved by tool messages
+	resolved := make(map[string]bool)
+	for _, item := range msgs.Array() {
+		if item.Get("role").String() == "tool" {
+			if id := item.Get("tool_call_id").String(); id != "" {
+				resolved[id] = true
+			}
+		}
+	}
+
+	items := msgs.Array()
+	needsStrip := make([]int, 0)
+
+	for i, item := range items {
+		if item.Get("role").String() != "assistant" {
+			continue
+		}
+		tc := item.Get("tool_calls")
+		if !tc.Exists() || !tc.IsArray() {
+			continue
+		}
+		// Check if ALL tool_calls are resolved by a following tool message
+		allResolved := true
+		for _, call := range tc.Array() {
+			if id := call.Get("id").String(); id != "" {
+				if !resolved[id] {
+					allResolved = false
+					break
+				}
+			}
+		}
+		if !allResolved {
+			needsStrip = append(needsStrip, i)
+		}
+	}
+
+	if len(needsStrip) == 0 {
+		return payload
+	}
+
+	// Strip from last to first to preserve indices
+	for i := len(needsStrip) - 1; i >= 0; i-- {
+		path := fmt.Sprintf("messages.%d.tool_calls", needsStrip[i])
+		payload, _ = sjson.DeleteBytes(payload, path)
+	}
+	return payload
+}
+
 
 func opencodeGoUsesMessages(model string) bool {
 	base := strings.ToLower(strings.TrimSpace(thinking.ParseSuffix(model).ModelName))
