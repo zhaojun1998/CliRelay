@@ -911,6 +911,130 @@ func opencodeGoAuthWithBaseURL(auth *cliproxyauth.Auth) *cliproxyauth.Auth {
 	return &clone
 }
 
+// opencodeGoFixToolCallArguments repairs tool_calls where function.arguments contains
+// concatenated JSON objects by splitting them into separate tool_call entries.
+// This handles a Codex Desktop client bug where multiple shell_command calls get
+// merged into a single tool_call's arguments field (e.g., {"c":"ls"}{"c":"cat pkg.json"}).
+func opencodeGoFixToolCallArguments(payload []byte) []byte {
+	if len(payload) == 0 || !json.Valid(payload) {
+		return payload
+	}
+	var root map[string]any
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return payload
+	}
+	messages, ok := root["messages"].([]any)
+	if !ok {
+		return payload
+	}
+	changed := false
+	for _, rawMsg := range messages {
+		msg, ok := rawMsg.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := msg["role"].(string)
+		if !strings.EqualFold(role, "assistant") {
+			continue
+		}
+		rawCalls, ok := msg["tool_calls"]
+		if !ok {
+			continue
+		}
+		calls, ok := rawCalls.([]any)
+		if !ok {
+			continue
+		}
+		fixed := make([]any, 0, len(calls))
+		for _, rawCall := range calls {
+			call, ok := rawCall.(map[string]any)
+			if !ok {
+				fixed = append(fixed, rawCall)
+				continue
+			}
+			fn, ok := call["function"].(map[string]any)
+			if !ok {
+				fixed = append(fixed, rawCall)
+				continue
+			}
+			args, ok := fn["arguments"].(string)
+			if !ok {
+				fixed = append(fixed, rawCall)
+				continue
+			}
+			if json.Valid([]byte(args)) {
+				fixed = append(fixed, rawCall)
+				continue
+			}
+			parts := splitConcatenatedJSONObjects(args)
+			if len(parts) <= 1 {
+				fixed = append(fixed, rawCall)
+				continue
+			}
+			changed = true
+			// First split part replaces the original tool_call's arguments.
+			fn["arguments"] = parts[0]
+			fixed = append(fixed, call)
+			baseID, _ := call["id"].(string)
+			for i := 1; i < len(parts); i++ {
+				newCall := cloneToolCallMap(call, baseID, i)
+				if newFn, ok := newCall["function"].(map[string]any); ok {
+					newFn["arguments"] = parts[i]
+				}
+				fixed = append(fixed, newCall)
+			}
+		}
+		if changed {
+			msg["tool_calls"] = fixed
+		}
+	}
+	if !changed {
+		return payload
+	}
+	out, err := json.Marshal(root)
+	if err != nil {
+		return payload
+	}
+	return out
+}
+
+// splitConcatenatedJSONObjects splits a string containing concatenated JSON objects
+// into individual JSON strings. Uses json.Decoder to read one object at a time
+// regardless of whitespace, nesting, or string content.
+func splitConcatenatedJSONObjects(input string) []string {
+	decoder := json.NewDecoder(strings.NewReader(input))
+	var parts []string
+	for {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			break
+		}
+		parts = append(parts, string(raw))
+	}
+	return parts
+}
+
+// cloneToolCallMap creates a shallow copy of a tool_call map with a new ID
+// and a deep clone of its function sub-map.
+func cloneToolCallMap(original map[string]any, baseID string, splitIdx int) map[string]any {
+	clone := make(map[string]any, len(original))
+	for k, v := range original {
+		clone[k] = v
+	}
+	if baseID != "" {
+		clone["id"] = fmt.Sprintf("%s_split_%d", baseID, splitIdx)
+	}
+	// Deep clone the function map so each split tool_call has independent state.
+	if fn, ok := original["function"].(map[string]any); ok {
+		fnClone := make(map[string]any, len(fn))
+		for k, v := range fn {
+			fnClone[k] = v
+		}
+		clone["function"] = fnClone
+	}
+	return clone
+}
+
 func opencodeGoClaudeMessageToSSE(data []byte) []byte {
 	root := gjson.ParseBytes(data)
 	if !root.Exists() {
