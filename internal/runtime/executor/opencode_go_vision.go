@@ -241,6 +241,7 @@ func opencodeGoPreprocessVision(ctx context.Context, cfg *config.Config, auth *c
 			payload, _ = sjson.SetBytes(payload, contentPath+".type", "text")
 			payload, _ = sjson.SetBytes(payload, contentPath+".text", "[Image: "+description+"]")
 			payload, _ = sjson.DeleteBytes(payload, contentPath+".image_url")
+			payload, _ = sjson.DeleteBytes(payload, contentPath+".detail")
 			modified = true
 		}
 		return payload
@@ -297,8 +298,9 @@ func opencodeGoPreprocessVision(ctx context.Context, cfg *config.Config, auth *c
 					}
 					contentPath := fmt.Sprintf("input.%d.content.%d", i, pIdx)
 					payload, _ = sjson.SetBytes(payload, contentPath+".type", "input_text")
-					payload, _ = sjson.SetBytes(payload, contentPath+".input_text", "[Image: "+description+"]")
+					payload, _ = sjson.SetBytes(payload, contentPath+".text", "[Image: "+description+"]")
 					payload, _ = sjson.DeleteBytes(payload, contentPath+".image_url")
+					payload, _ = sjson.DeleteBytes(payload, contentPath+".detail")
 					modified = true
 				}
 			}
