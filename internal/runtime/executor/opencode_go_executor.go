@@ -114,7 +114,11 @@ func (e *OpenCodeGoExecutor) Execute(ctx context.Context, auth *cliproxyauth.Aut
 			req.Payload = opencodeGoStripScreenshots(req.Payload)
 		}
 			// Strip orphaned tool_calls that strict upstreams reject.
-			req.Payload = opencodeGoStripOrphanedToolCalls(req.Payload)
+			cleaned := opencodeGoStripOrphanedToolCalls(req.Payload)
+			if len(cleaned) != len(req.Payload) {
+				log.Warnf("opencode: stripped orphaned tool_calls")
+			}
+			req.Payload = cleaned
 	var resp cliproxyexecutor.Response
 	var err error
 	if opencodeGoUsesMessages(req.Model) {
@@ -170,7 +174,11 @@ func (e *OpenCodeGoExecutor) ExecuteStream(ctx context.Context, auth *cliproxyau
 			req.Payload = opencodeGoStripScreenshots(req.Payload)
 		}
 			// Strip orphaned tool_calls that strict upstreams reject.
-			req.Payload = opencodeGoStripOrphanedToolCalls(req.Payload)
+			cleaned := opencodeGoStripOrphanedToolCalls(req.Payload)
+			if len(cleaned) != len(req.Payload) {
+				log.Warnf("opencode: stripped orphaned tool_calls")
+			}
+			req.Payload = cleaned
 	var result *cliproxyexecutor.StreamResult
 	var err error
 	if opencodeGoUsesMessages(req.Model) {
