@@ -477,10 +477,10 @@ func (h *Handler) GetConfiguredModelAvailability(c *gin.Context) {
 	activeMetadata := make([]map[string]any, 0, len(activeRows))
 	for _, row := range activeRows {
 		activeMetadata = append(activeMetadata, map[string]any{
-			"id":        row.ModelID,
-			"owned_by":  row.OwnedBy,
-			"source":    row.Source,
-			"enabled":   row.Enabled,
+			"id":       row.ModelID,
+			"owned_by": row.OwnedBy,
+			"source":   row.Source,
+			"enabled":  row.Enabled,
 		})
 	}
 
