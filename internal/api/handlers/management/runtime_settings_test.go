@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
+	settingsstore "github.com/router-for-me/CLIProxyAPI/v6/internal/management/settings/store"
 )
 
 func TestPutIdentityFingerprintPersistsToSQLite(t *testing.T) {
@@ -39,7 +39,7 @@ func TestPutIdentityFingerprintPersistsToSQLite(t *testing.T) {
 	}
 
 	var stored config.Config
-	if !usage.ApplyStoredRuntimeSettings(&stored) {
+	if !settingsstore.ApplyStoredRuntimeSettings(&stored) {
 		t.Fatal("ApplyStoredRuntimeSettings returned false")
 	}
 	if !stored.IdentityFingerprint.Codex.Enabled || stored.IdentityFingerprint.Codex.UserAgent != "codex_cli_rs/0.125.0" {
@@ -75,13 +75,13 @@ func TestPutOAuthModelAliasPersistsToSQLite(t *testing.T) {
 		"codex": [
 			{"name": "gpt-5.3-codex", "alias": "codex-latest", "fork": true}
 		]
-	}`), h.PutOAuthModelAlias)
+	}`), h.ProviderKeys().PutOAuthModelAlias)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PutOAuthModelAlias status = %d body = %s", rec.Code, rec.Body.String())
 	}
 
 	var stored config.Config
-	if !usage.ApplyStoredRuntimeSettings(&stored) {
+	if !settingsstore.ApplyStoredRuntimeSettings(&stored) {
 		t.Fatal("ApplyStoredRuntimeSettings returned false")
 	}
 	aliases := stored.OAuthModelAlias["codex"]
@@ -112,19 +112,19 @@ func TestPutProviderCredentialsPersistToSQLite(t *testing.T) {
 
 	codexRec := performModelsRequest(http.MethodPut, "/codex-api-key", []byte(`[
 		{"api-key": "sk-codex-db", "base-url": "https://codex.example.com"}
-	]`), h.PutCodexKeys)
+	]`), h.ProviderKeys().PutCodexKeys)
 	if codexRec.Code != http.StatusOK {
 		t.Fatalf("PutCodexKeys status = %d body = %s", codexRec.Code, codexRec.Body.String())
 	}
 	claudeRec := performModelsRequest(http.MethodPut, "/claude-api-key", []byte(`[
 		{"api-key": "sk-claude-db", "name": "claude-db", "base-url": "https://claude.example.com"}
-	]`), h.PutClaudeKeys)
+	]`), h.ProviderKeys().PutClaudeKeys)
 	if claudeRec.Code != http.StatusOK {
 		t.Fatalf("PutClaudeKeys status = %d body = %s", claudeRec.Code, claudeRec.Body.String())
 	}
 
 	var stored config.Config
-	if !usage.ApplyStoredRuntimeSettings(&stored) {
+	if !settingsstore.ApplyStoredRuntimeSettings(&stored) {
 		t.Fatal("ApplyStoredRuntimeSettings returned false")
 	}
 	if len(stored.CodexKey) != 1 || stored.CodexKey[0].APIKey != "sk-codex-db" || stored.CodexKey[0].BaseURL != "https://codex.example.com" {

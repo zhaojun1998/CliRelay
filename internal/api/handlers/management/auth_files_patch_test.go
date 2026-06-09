@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	managementauthfiles "github.com/router-for-me/CLIProxyAPI/v6/internal/management/authfiles"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 )
@@ -329,7 +329,7 @@ func TestBuildAuthFileEntryIncludesDefaultAndDisplayTags(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
@@ -364,7 +364,7 @@ func TestBuildAuthFileEntryHonorsExplicitEmptyDisplayTags(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
@@ -391,7 +391,7 @@ func TestBuildAuthFileEntryReplacesStaleExplicitPlanDisplayTag(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
@@ -431,16 +431,16 @@ func TestBuildAuthFileEntryExposesMetadataPlanTypeBeforeIDTokenClaim(t *testing.
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
 	if got, _ := entry["plan_type"].(string); got != "free" {
 		t.Fatalf("plan_type = %q, want free", got)
 	}
-	claims, ok := entry["id_token"].(gin.H)
+	claims, ok := entry["id_token"].(map[string]any)
 	if !ok {
-		t.Fatalf("id_token type = %T, want gin.H", entry["id_token"])
+		t.Fatalf("id_token type = %T, want map[string]any", entry["id_token"])
 	}
 	if got, _ := claims["plan_type"].(string); got != "plus" {
 		t.Fatalf("id_token.plan_type = %q, want plus", got)
@@ -480,13 +480,13 @@ func TestBuildAuthFileEntryIncludesActiveRestrictions(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
-	restrictions, ok := entry["restrictions"].([]gin.H)
+	restrictions, ok := entry["restrictions"].([]map[string]any)
 	if !ok {
-		t.Fatalf("restrictions type = %T, want []gin.H", entry["restrictions"])
+		t.Fatalf("restrictions type = %T, want []map[string]any", entry["restrictions"])
 	}
 	if len(restrictions) != 1 {
 		t.Fatalf("restrictions length = %d, want 1", len(restrictions))
@@ -548,13 +548,13 @@ func TestBuildAuthFileEntryDedupesDuplicateRestrictions(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
-	restrictions, ok := entry["restrictions"].([]gin.H)
+	restrictions, ok := entry["restrictions"].([]map[string]any)
 	if !ok {
-		t.Fatalf("restrictions type = %T, want []gin.H", entry["restrictions"])
+		t.Fatalf("restrictions type = %T, want []map[string]any", entry["restrictions"])
 	}
 	if len(restrictions) != 1 {
 		t.Fatalf("restrictions length = %d, want 1", len(restrictions))
@@ -585,7 +585,7 @@ func TestBuildAuthFileEntryIncludesSubscriptionExpiration(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
@@ -618,7 +618,7 @@ func TestBuildAuthFileEntryIncludesSubscriptionStartAndPeriod(t *testing.T) {
 		},
 	}
 
-	entry := (&Handler{}).buildAuthFileEntry(auth)
+	entry := managementauthfiles.BuildEntry(auth, managementauthfiles.EntryOptions{})
 	if entry == nil {
 		t.Fatal("expected auth file entry")
 	}
@@ -640,32 +640,6 @@ func TestBuildAuthFileEntryIncludesSubscriptionStartAndPeriod(t *testing.T) {
 	}
 	if _, ok := entry["subscription_remaining_days"].(int64); !ok {
 		t.Fatalf("subscription_remaining_days = %#v, want int64", entry["subscription_remaining_days"])
-	}
-}
-
-func TestClaudeOAuthMetadataFromTokenStorageIncludesRuntimeTokens(t *testing.T) {
-	expired := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
-	lastRefresh := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
-
-	meta := claudeOAuthMetadataFromTokenStorage(&claude.ClaudeTokenStorage{
-		AccessToken:  "access-token",
-		RefreshToken: "refresh-token",
-		Email:        "claude@example.com",
-		Expire:       expired,
-		LastRefresh:  lastRefresh,
-	})
-
-	for key, want := range map[string]string{
-		"type":          "claude",
-		"access_token":  "access-token",
-		"refresh_token": "refresh-token",
-		"email":         "claude@example.com",
-		"expired":       expired,
-		"last_refresh":  lastRefresh,
-	} {
-		if got, _ := meta[key].(string); got != want {
-			t.Fatalf("metadata[%s] = %q, want %q", key, got, want)
-		}
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api/bodyutil"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
+	settingsstore "github.com/router-for-me/CLIProxyAPI/v6/internal/management/settings/store"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
@@ -342,11 +342,7 @@ func (h *Handler) PutConfigYAML(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "reload_failed", "message": err.Error()})
 		return
 	}
-	if usage.ConfigStoreAvailable() {
-		usage.PersistRuntimeSettingsPresentInYAML(newCfg, body)
-		usage.MigrateRuntimeSettingsFromConfig(newCfg, h.configFilePath)
-		usage.ApplyStoredRuntimeSettings(newCfg)
-	}
+	settingsstore.SyncReloadedConfigAfterYAMLSave(newCfg, h.configFilePath, body)
 	h.cfg = newCfg
 	mutated := h.onConfigMutated
 	h.mu.Unlock()

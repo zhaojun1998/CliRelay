@@ -2,6 +2,7 @@ package usage
 
 import (
 	"database/sql"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -118,6 +119,84 @@ func TestQueryEntityStatsFiltersByRequestedEntities(t *testing.T) {
 	}
 	if sourceStats[0].Requests != 1 || sourceStats[0].Failed != 1 {
 		t.Fatalf("source stats = %+v, want one failed request", sourceStats[0])
+	}
+}
+
+func TestCacheRateUsesEffectiveInputTokenTotals(t *testing.T) {
+	testCases := []struct {
+		name string
+		rows []TokenStats
+		want float64
+	}{
+		{
+			name: "cached tokens are part of input tokens",
+			rows: []TokenStats{{InputTokens: 1000, CachedTokens: 400, TotalTokens: 1000}},
+			want: 40,
+		},
+		{
+			name: "cached tokens are reported separately from small input tokens",
+			rows: []TokenStats{{InputTokens: 21, CachedTokens: 188086, TotalTokens: 188107}},
+			want: float64(188086) / float64(188107) * 100,
+		},
+		{
+			name: "cached tokens without raw input tokens",
+			rows: []TokenStats{{CachedTokens: 250, TotalTokens: 250}},
+			want: 100,
+		},
+		{
+			name: "mixed provider semantics are handled per request row",
+			rows: []TokenStats{
+				{InputTokens: 100, TotalTokens: 100},
+				{CachedTokens: 50, TotalTokens: 50},
+			},
+			want: float64(50) / float64(150) * 100,
+		},
+		{
+			name: "zero token totals",
+			rows: []TokenStats{{TotalTokens: 0}},
+			want: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			initTestUsageDB(t, config.RequestLogStorageConfig{})
+
+			now := time.Now().UTC()
+			for index, row := range tc.rows {
+				InsertLog(
+					"sk-cache-rate",
+					"",
+					"gpt-5.4",
+					"codex",
+					"Codex",
+					"auth-cache-rate",
+					false,
+					now.Add(time.Duration(index)*time.Second),
+					1,
+					0,
+					row,
+					"",
+					"",
+				)
+			}
+
+			stats, err := QueryStats(LogQueryParams{Days: 30})
+			if err != nil {
+				t.Fatalf("QueryStats() error = %v", err)
+			}
+			if math.Abs(stats.CacheRate-tc.want) > 0.000001 {
+				t.Fatalf("QueryStats().CacheRate = %.9f, want %.9f", stats.CacheRate, tc.want)
+			}
+
+			kpi, err := QueryDashboardKPI(30)
+			if err != nil {
+				t.Fatalf("QueryDashboardKPI() error = %v", err)
+			}
+			if math.Abs(kpi.CacheRate-tc.want) > 0.000001 {
+				t.Fatalf("QueryDashboardKPI().CacheRate = %.9f, want %.9f", kpi.CacheRate, tc.want)
+			}
+		})
 	}
 }
 

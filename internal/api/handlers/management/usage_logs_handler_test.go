@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -66,7 +67,7 @@ func TestGetUsageLogsResolvesLegacySourceChannelName(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50", nil)
 
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -140,7 +141,7 @@ func TestGetUsageLogsKeepsStoredChannelNameWhenCurrentAuthNameDiffers(t *testing
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50", nil)
 
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -170,7 +171,7 @@ func TestGetUsageLogsKeepsStoredChannelNameWhenCurrentAuthNameDiffers(t *testing
 	rec = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50&channel=tabcode-plus", nil)
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("filtered expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
 	}
@@ -184,7 +185,7 @@ func TestGetUsageLogsKeepsStoredChannelNameWhenCurrentAuthNameDiffers(t *testing
 	rec = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50&channel=tabcode-pro", nil)
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("mismatched filtered expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
 	}
@@ -263,7 +264,7 @@ func TestGetUsageLogsResolvesGenericKimiChannelByAuthIndex(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50", nil)
 
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -295,7 +296,7 @@ func TestGetUsageLogsResolvesGenericKimiChannelByAuthIndex(t *testing.T) {
 	rec = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50&channel=kimi-b", nil)
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("filtered expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
 	}
@@ -333,7 +334,7 @@ func TestGetUsageLogs_EmptyDB_DoesNotReturnNullSlices(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs?days=7&page=1&size=50", nil)
 
-	h.GetUsageLogs(c)
+	h.UsageLogs().GetUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -409,7 +410,7 @@ func TestGetLogContent_ReturnsRequestDetailsPart(t *testing.T) {
 	c.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(result.Items[0].ID, 10)}}
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/logs/1/content?part=details&format=json", nil)
 
-	h.GetLogContent(c)
+	h.UsageLogs().GetLogContent(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -452,7 +453,7 @@ func TestGetPublicLogContent_RejectsRequestDetailsPart(t *testing.T) {
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	h.GetPublicLogContent(c)
+	h.UsageLogs().GetPublicLogContent(c)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusForbidden, rec.Code, rec.Body.String())
@@ -519,7 +520,7 @@ func TestGetAuthFileGroupTrendAggregatesByProvider(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/auth-file-group-trend?group=codex&days=7", nil)
 
-	h.GetAuthFileGroupTrend(c)
+	h.UsageLogs().GetAuthFileGroupTrend(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -590,7 +591,7 @@ func TestGetEntityUsageStatsScopesAuthIndexesAndSources(t *testing.T) {
 		nil,
 	)
 
-	h.GetEntityUsageStats(c)
+	h.UsageLogs().GetEntityUsageStats(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -655,9 +656,24 @@ func TestGetAuthFileTrendUsesWeeklyResetCycleForRequestTotal(t *testing.T) {
 	resetAt := now.Add(4 * 24 * time.Hour)
 	cycleStart := resetAt.Add(-7 * 24 * time.Hour)
 
-	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, cycleStart.Add(-time.Hour), 1, 1, usage.TokenStats{TotalTokens: 1}, "", "")
-	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, cycleStart.Add(time.Hour), 1, 1, usage.TokenStats{TotalTokens: 1}, "", "")
-	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, now.Add(-time.Hour), 1, 1, usage.TokenStats{TotalTokens: 1}, "", "")
+	if err := usage.UpsertModelPricing("gpt-5.4", 1, 2, 0); err != nil {
+		t.Fatalf("UpsertModelPricing: %v", err)
+	}
+	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, cycleStart.Add(-time.Hour), 1, 1, usage.TokenStats{
+		InputTokens:  1000,
+		OutputTokens: 2000,
+		TotalTokens:  3000,
+	}, "", "")
+	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, cycleStart.Add(time.Hour), 1, 1, usage.TokenStats{
+		InputTokens:  1000,
+		OutputTokens: 2000,
+		TotalTokens:  3000,
+	}, "", "")
+	usage.InsertLog("", "", "gpt-5.4", "codex", "GptPro2", auth.Index, false, now.Add(-time.Hour), 1, 1, usage.TokenStats{
+		InputTokens:  1000,
+		OutputTokens: 1000,
+		TotalTokens:  2000,
+	}, "", "")
 
 	weeklyRemaining := 93.0
 	if err := usage.RecordQuotaSnapshotPoints(auth.Index, "codex", []usage.QuotaSnapshotPoint{
@@ -678,17 +694,18 @@ func TestGetAuthFileTrendUsesWeeklyResetCycleForRequestTotal(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodGet, "/usage/auth-file-trend?auth_index="+auth.Index+"&days=7&hours=5", nil)
 
-	h.GetAuthFileTrend(c)
+	h.UsageLogs().GetAuthFileTrend(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
 	}
 
 	var payload struct {
-		AuthIndex         string `json:"auth_index"`
-		RequestTotal      int64  `json:"request_total"`
-		CycleRequestTotal int64  `json:"cycle_request_total"`
-		CycleStart        string `json:"cycle_start"`
+		AuthIndex         string  `json:"auth_index"`
+		RequestTotal      int64   `json:"request_total"`
+		CycleRequestTotal int64   `json:"cycle_request_total"`
+		CycleCostTotal    float64 `json:"cycle_cost_total"`
+		CycleStart        string  `json:"cycle_start"`
 		DailyUsage        []struct {
 			Date     string `json:"date"`
 			Requests int64  `json:"requests"`
@@ -715,6 +732,9 @@ func TestGetAuthFileTrendUsesWeeklyResetCycleForRequestTotal(t *testing.T) {
 	}
 	if payload.CycleRequestTotal != 2 {
 		t.Fatalf("cycle_request_total = %d, want 2", payload.CycleRequestTotal)
+	}
+	if math.Abs(payload.CycleCostTotal-0.008) > 1e-12 {
+		t.Fatalf("cycle_cost_total = %v, want 0.008", payload.CycleCostTotal)
 	}
 	if payload.CycleStart != cycleStart.Format(time.RFC3339) {
 		t.Fatalf("cycle_start = %q, want %q", payload.CycleStart, cycleStart.Format(time.RFC3339))
@@ -821,7 +841,7 @@ func TestGetPublicUsageLogs_EmptyDB_DoesNotReturnNullModels(t *testing.T) {
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	h.GetPublicUsageLogs(c)
+	h.UsageLogs().GetPublicUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -869,7 +889,7 @@ func TestGetPublicUsageLogs_AcceptsPOSTBody(t *testing.T) {
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	h.GetPublicUsageLogs(c)
+	h.UsageLogs().GetPublicUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -915,7 +935,7 @@ func TestGetPublicUsageLogs_DoesNotReadAPIKeyFromQuery(t *testing.T) {
 		nil,
 	)
 
-	h.GetPublicUsageLogs(c)
+	h.UsageLogs().GetPublicUsageLogs(c)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusBadRequest, rec.Code, rec.Body.String())
@@ -954,7 +974,7 @@ func TestGetPublicUsageLogs_RejectsOversizedPOSTBody(t *testing.T) {
 	)
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	h.GetPublicUsageLogs(c)
+	h.UsageLogs().GetPublicUsageLogs(c)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusRequestEntityTooLarge, rec.Code, rec.Body.String())
@@ -994,7 +1014,7 @@ func TestDeleteUsageLogsClearsRequestLogDatabase(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodDelete, "/usage/logs", nil)
 
-	h.DeleteUsageLogs(c)
+	h.UsageLogs().DeleteUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
@@ -1054,7 +1074,7 @@ func TestDeleteUsageLogsSupportsSelectiveBodyCleanup(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodDelete, "/usage/logs", strings.NewReader(`{"clear_body_content":true,"clear_detail_content":true}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	h.DeleteUsageLogs(c)
+	h.UsageLogs().DeleteUsageLogs(c)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
