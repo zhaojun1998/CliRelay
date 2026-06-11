@@ -80,8 +80,10 @@ func (h *Handler) PutProxyPool(c *gin.Context) {
 			h.cfg = &config.Config{}
 		}
 		h.cfg.ProxyPool = proxypoolsettings.List()
+		cfgRef := h.cfg
 		h.mu.Unlock()
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		h.notifyConfigMutated(cfgRef)
 		return
 	}
 
@@ -141,8 +143,10 @@ func (h *Handler) PatchProxyPoolEntry(c *gin.Context) {
 			h.cfg = &config.Config{}
 		}
 		h.cfg.ProxyPool = proxypoolsettings.List()
+		cfgRef := h.cfg
 		h.mu.Unlock()
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		h.notifyConfigMutated(cfgRef)
 		return
 	}
 
@@ -309,4 +313,11 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func (h *Handler) notifyConfigMutated(cfg *config.Config) {
+	if h == nil || h.onConfigMutated == nil {
+		return
+	}
+	h.onConfigMutated(cfg)
 }

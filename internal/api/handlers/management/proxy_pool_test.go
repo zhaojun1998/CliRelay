@@ -210,6 +210,14 @@ func TestProxyPoolHandlersUseSQLiteWhenAvailable(t *testing.T) {
 		},
 	}, "", nil)
 	defer h.Close()
+	var hookCalled bool
+	var hookProxyPool []config.ProxyPoolEntry
+	h.SetConfigMutatedHook(func(updated *config.Config) {
+		hookCalled = true
+		if updated != nil {
+			hookProxyPool = append([]config.ProxyPoolEntry(nil), updated.ProxyPool...)
+		}
+	})
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -240,6 +248,12 @@ func TestProxyPoolHandlersUseSQLiteWhenAvailable(t *testing.T) {
 	if len(h.cfg.ProxyPool) != 1 || h.cfg.ProxyPool[0].ID != "new" {
 		t.Fatalf("runtime proxy pool = %#v", h.cfg.ProxyPool)
 	}
+	if !hookCalled {
+		t.Fatal("config mutation hook was not called")
+	}
+	if len(hookProxyPool) != 1 || hookProxyPool[0].ID != "new" {
+		t.Fatalf("hook proxy pool = %#v", hookProxyPool)
+	}
 }
 
 func TestPatchProxyPoolEntryUsesSQLiteWhenAvailable(t *testing.T) {
@@ -259,6 +273,14 @@ func TestPatchProxyPoolEntryUsesSQLiteWhenAvailable(t *testing.T) {
 		},
 	}, "", nil)
 	defer h.Close()
+	var hookCalled bool
+	var hookProxyPool []config.ProxyPoolEntry
+	h.SetConfigMutatedHook(func(updated *config.Config) {
+		hookCalled = true
+		if updated != nil {
+			hookProxyPool = append([]config.ProxyPoolEntry(nil), updated.ProxyPool...)
+		}
+	})
 
 	payload := []byte(`{"name":"Updated DB Proxy","url":"http://127.0.0.1:9001","enabled":false,"description":"rotated"}`)
 	w := httptest.NewRecorder()
@@ -284,6 +306,12 @@ func TestPatchProxyPoolEntryUsesSQLiteWhenAvailable(t *testing.T) {
 	}
 	if len(h.cfg.ProxyPool) != 1 || h.cfg.ProxyPool[0].ID != "db" || h.cfg.ProxyPool[0].Name != "Updated DB Proxy" {
 		t.Fatalf("runtime proxy pool = %#v", h.cfg.ProxyPool)
+	}
+	if !hookCalled {
+		t.Fatal("config mutation hook was not called")
+	}
+	if len(hookProxyPool) != 1 || hookProxyPool[0].ID != "db" || hookProxyPool[0].Name != "Updated DB Proxy" {
+		t.Fatalf("hook proxy pool = %#v", hookProxyPool)
 	}
 }
 
