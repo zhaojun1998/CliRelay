@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DefaultRequestBodyLimit         int64 = 16 << 20
+	DefaultRequestBodyLimit         int64 = 128 << 20
 	DefaultModelBodyLimit           int64 = 128 << 20
 	DefaultRequestBodyDiskThreshold int64 = 8 << 20
 	ManagementBodyLimit             int64 = 2 << 20
