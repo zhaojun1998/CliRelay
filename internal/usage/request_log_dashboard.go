@@ -53,16 +53,13 @@ const dashboardThroughputBucketCount = 7
 
 // QueryDashboardKPI returns aggregated KPI data from SQLite for the dashboard.
 // This replaces the old in-memory snapshot-based counting which lost data on restart.
-func QueryDashboardKPI(days int) (DashboardKPI, error) {
+func QueryDashboardKPI(win TimeWindow) (DashboardKPI, error) {
 	db := getDB()
 	if db == nil {
 		return DashboardKPI{}, nil
 	}
-	if days < 1 {
-		days = 7
-	}
 
-	cutoff := CutoffStartUTC(days).Format(time.RFC3339)
+	startStr, endStr := win.boundsForQuery()
 
 	var kpi DashboardKPI
 	var effectiveInputTokens int64
@@ -78,7 +75,12 @@ func QueryDashboardKPI(days int) (DashboardKPI, error) {
 		"COALESCE(SUM(cost), 0), " +
 		"COALESCE(SUM(" + cacheRateEffectiveInputSQL + "), 0) " +
 		"FROM request_logs WHERE timestamp >= ?"
-	err := db.QueryRow(kpiSQL, cutoff).Scan(
+	args := []interface{}{startStr}
+	if endStr != "" {
+		kpiSQL += " AND timestamp < ?"
+		args = append(args, endStr)
+	}
+	err := db.QueryRow(kpiSQL, args...).Scan(
 		&kpi.TotalRequests,
 		&kpi.SuccessRequests,
 		&kpi.FailedRequests,
@@ -105,27 +107,30 @@ func QueryDashboardKPI(days int) (DashboardKPI, error) {
 // QueryDashboardTrends returns fixed-width trend buckets used by the dashboard.
 // KPI trends follow the selected day range, while throughput always shows the
 // most recent 7 one-minute buckets.
-func QueryDashboardTrends(days int) (DashboardTrends, error) {
+func QueryDashboardTrends(win TimeWindow) (DashboardTrends, error) {
 	db := getDB()
 	if db == nil {
-		return emptyDashboardTrends(days), nil
-	}
-	if days < 1 {
-		days = 7
+		return emptyDashboardTrends(win), nil
 	}
 
 	loc := getUsageLocation()
-	buckets := buildDashboardBuckets(days, loc)
+	buckets := buildDashboardBuckets(win, loc)
 	byKey := make(map[string]*dashboardBucket, len(buckets))
 	for i := range buckets {
 		byKey[buckets[i].key] = &buckets[i]
 	}
 
-	rows, err := db.Query(`
+	startStr, endStr := win.boundsForQuery()
+	trendSQL := `
 		SELECT timestamp, failed, total_tokens
 		FROM request_logs
-		WHERE timestamp >= ?
-	`, CutoffStartUTC(days).Format(time.RFC3339))
+		WHERE timestamp >= ?`
+	trendArgs := []interface{}{startStr}
+	if endStr != "" {
+		trendSQL += " AND timestamp < ?"
+		trendArgs = append(trendArgs, endStr)
+	}
+	rows, err := db.Query(trendSQL, trendArgs...)
 	if err != nil {
 		return DashboardTrends{}, fmt.Errorf("usage: query dashboard trends: %w", err)
 	}
@@ -145,7 +150,7 @@ func QueryDashboardTrends(days int) (DashboardTrends, error) {
 				continue
 			}
 		}
-		key := dashboardBucketKey(parsed.In(loc), days)
+		key := dashboardBucketKey(parsed.In(loc), win)
 		bucket := byKey[key]
 		if bucket == nil {
 			continue
@@ -172,48 +177,57 @@ func QueryDashboardTrends(days int) (DashboardTrends, error) {
 	return trends, nil
 }
 
-func emptyDashboardTrends(days int) DashboardTrends {
-	if days < 1 {
-		days = 7
-	}
+func emptyDashboardTrends(win TimeWindow) DashboardTrends {
 	loc := getUsageLocation()
-	trends := dashboardTrendsFromBuckets(buildDashboardBuckets(days, loc))
+	trends := dashboardTrendsFromBuckets(buildDashboardBuckets(win, loc))
 	trends.ThroughputSeries = throughputSeriesFromBuckets(buildRecentThroughputBucketsAt(time.Now(), loc))
 	return trends
 }
 
-func buildDashboardBuckets(days int, loc *time.Location) []dashboardBucket {
+func buildDashboardBuckets(win TimeWindow, loc *time.Location) []dashboardBucket {
 	if loc == nil {
 		loc = time.Local
 	}
-	start := CutoffStartUTC(days).In(loc)
-	if days == 1 {
+	start := win.Start.In(loc)
+
+	// For the legacy days-based path (open End) keep the original behaviour: a
+	// 1-day window emits a full 24 hourly buckets and an N-day window emits N
+	// daily buckets. Custom ranges generate buckets precisely up to End.
+	if win.SpanDays() <= 1 {
+		startHour := time.Date(start.Year(), start.Month(), start.Day(), start.Hour(), 0, 0, 0, loc)
+		end := startHour.Add(24 * time.Hour)
+		if !win.End.IsZero() {
+			end = win.End.In(loc)
+		}
 		buckets := make([]dashboardBucket, 0, 24)
-		for i := 0; i < 24; i++ {
-			at := start.Add(time.Duration(i) * time.Hour)
+		for at := startHour; at.Before(end); at = at.Add(time.Hour) {
 			buckets = append(buckets, dashboardBucket{
 				label:   at.Format("15:04"),
-				key:     dashboardBucketKey(at, days),
+				key:     dashboardBucketKey(at, win),
 				minutes: 60,
 			})
 		}
 		return buckets
 	}
 
-	buckets := make([]dashboardBucket, 0, days)
-	for i := 0; i < days; i++ {
-		at := start.AddDate(0, 0, i)
+	startDay := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc)
+	end := startDay.AddDate(0, 0, win.SpanDays())
+	if !win.End.IsZero() {
+		end = win.End.In(loc)
+	}
+	buckets := make([]dashboardBucket, 0, win.SpanDays())
+	for at := startDay; at.Before(end); at = at.AddDate(0, 0, 1) {
 		buckets = append(buckets, dashboardBucket{
 			label:   at.Format("2006-01-02"),
-			key:     dashboardBucketKey(at, days),
+			key:     dashboardBucketKey(at, win),
 			minutes: 24 * 60,
 		})
 	}
 	return buckets
 }
 
-func dashboardBucketKey(t time.Time, days int) string {
-	if days == 1 {
+func dashboardBucketKey(t time.Time, win TimeWindow) string {
+	if win.SpanDays() <= 1 {
 		return t.Format("2006-01-02 15")
 	}
 	return t.Format("2006-01-02")

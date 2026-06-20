@@ -3,7 +3,8 @@ package usagelogs
 import "github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 
 func (s *Service) PublicChartData(apiKey string, days int) (map[string]any, error) {
-	daily, err := usage.QueryDailySeries(apiKey, days)
+	win := usage.WindowFromDays(days)
+	daily, err := usage.QueryDailySeries(apiKey, win)
 	if err != nil {
 		return nil, err
 	}
@@ -11,7 +12,7 @@ func (s *Service) PublicChartData(apiKey string, days int) (map[string]any, erro
 		daily = []usage.DailySeriesPoint{}
 	}
 
-	models, err := usage.QueryModelDistribution(apiKey, days)
+	models, err := usage.QueryModelDistribution(apiKey, win)
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +32,8 @@ func (s *Service) PublicChartData(apiKey string, days int) (map[string]any, erro
 	}, nil
 }
 
-func (s *Service) UsageChartData(apiKey string, days int) (map[string]any, error) {
-	daily, err := usage.QueryDailySeries(apiKey, days)
+func (s *Service) UsageChartData(apiKey string, win usage.TimeWindow) (map[string]any, error) {
+	daily, err := usage.QueryDailySeries(apiKey, win)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +41,7 @@ func (s *Service) UsageChartData(apiKey string, days int) (map[string]any, error
 		daily = []usage.DailySeriesPoint{}
 	}
 
-	models, err := usage.QueryModelDistribution(apiKey, days)
+	models, err := usage.QueryModelDistribution(apiKey, win)
 	if err != nil {
 		return nil, err
 	}
@@ -48,20 +49,27 @@ func (s *Service) UsageChartData(apiKey string, days int) (map[string]any, error
 		models = []usage.ModelDistributionPoint{}
 	}
 
-	hourlyTokens, hourlyModels, err := usage.QueryHourlySeries(apiKey, 24)
-	if err != nil {
-		return nil, err
-	}
-	if hourlyTokens == nil {
-		hourlyTokens = []usage.HourlyTokenPoint{}
-	}
-	if hourlyModels == nil {
-		hourlyModels = []usage.HourlyModelPoint{}
+	// Hourly is a fixed "last 24h" real-time window unrelated to a historical
+	// range. For custom ranges (explicit End) skip it and return empty series so
+	// the frontend hides the hourly charts.
+	hourlyTokens := []usage.HourlyTokenPoint{}
+	hourlyModels := []usage.HourlyModelPoint{}
+	if win.End.IsZero() {
+		hourlyTokens, hourlyModels, err = usage.QueryHourlySeries(apiKey, 24)
+		if err != nil {
+			return nil, err
+		}
+		if hourlyTokens == nil {
+			hourlyTokens = []usage.HourlyTokenPoint{}
+		}
+		if hourlyModels == nil {
+			hourlyModels = []usage.HourlyModelPoint{}
+		}
 	}
 
 	var apikeyDist []usage.APIKeyDistributionPoint
 	if apiKey == "" {
-		apikeyDist, err = usage.QueryAPIKeyDistribution(days)
+		apikeyDist, err = usage.QueryAPIKeyDistribution(win)
 		if err != nil {
 			return nil, err
 		}

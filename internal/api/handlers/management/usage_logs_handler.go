@@ -196,7 +196,11 @@ func (h *UsageLogsHandler) GetPublicLogContent(c *gin.Context) {
 
 // GetUsageChartData returns pre-aggregated chart data for the management portal.
 func (h *UsageLogsHandler) GetUsageChartData(c *gin.Context) {
-	payload, err := h.service().UsageChartData(strings.TrimSpace(c.Query("api_key")), intQueryDefault(c, "days", 7))
+	win := usage.WindowFromDays(intQueryDefault(c, "days", 7))
+	if parsed, ok := usage.ParseTimeWindow(c.Query("start"), c.Query("end")); ok && parsed.SpanDays() <= 366 {
+		win = parsed
+	}
+	payload, err := h.service().UsageChartData(strings.TrimSpace(c.Query("api_key")), win)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

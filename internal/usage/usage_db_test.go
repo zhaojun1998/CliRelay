@@ -192,7 +192,7 @@ func TestCacheRateUsesEffectiveInputTokenTotals(t *testing.T) {
 				t.Fatalf("QueryStats().CacheRate = %.9f, want %.9f", stats.CacheRate, tc.want)
 			}
 
-			kpi, err := QueryDashboardKPI(30)
+			kpi, err := QueryDashboardKPI(WindowFromDays(30))
 			if err != nil {
 				t.Fatalf("QueryDashboardKPI() error = %v", err)
 			}
@@ -1481,7 +1481,7 @@ func TestQueryAPIKeySelectorsHandleLegacyRowsWithoutAPIKeyID(t *testing.T) {
 		t.Fatalf("filters.APIKeyNames[sk-legacy] = %q, want 袁蔚", filters.APIKeyNames["sk-legacy"])
 	}
 
-	dist, err := QueryAPIKeyDistribution(7)
+	dist, err := QueryAPIKeyDistribution(WindowFromDays(7))
 	if err != nil {
 		t.Fatalf("QueryAPIKeyDistribution() error = %v", err)
 	}
@@ -1538,7 +1538,7 @@ func TestRequestStatisticsPersistsAPIKeyIdentitySnapshotAcrossRename(t *testing.
 		t.Fatalf("filters.APIKeyNames[sk-new] = %q, want 袁蔚", filters.APIKeyNames["sk-new"])
 	}
 
-	dist, err := QueryAPIKeyDistribution(7)
+	dist, err := QueryAPIKeyDistribution(WindowFromDays(7))
 	if err != nil {
 		t.Fatalf("QueryAPIKeyDistribution() error = %v", err)
 	}

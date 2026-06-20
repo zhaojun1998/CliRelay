@@ -24,16 +24,13 @@ type ModelDistributionPoint struct {
 }
 
 // QueryDailySeries returns per-day aggregated request count and token usage for a given API key.
-func QueryDailySeries(apiKey string, days int) ([]DailySeriesPoint, error) {
+func QueryDailySeries(apiKey string, win TimeWindow) ([]DailySeriesPoint, error) {
 	db := getDB()
 	if db == nil {
 		return nil, nil
 	}
-	if days < 1 {
-		days = 7
-	}
 
-	params := LogQueryParams{APIKey: apiKey, Days: days}
+	params := LogQueryParams{APIKey: apiKey, Window: &win}
 	where, args := buildWhereClause(params)
 
 	// NOTE: timestamps are stored as UTC RFC3339 strings; localtime converts them to the process timezone
@@ -64,16 +61,13 @@ func QueryDailySeries(apiKey string, days int) ([]DailySeriesPoint, error) {
 }
 
 // QueryModelDistribution returns request count and token usage grouped by model for a given API key.
-func QueryModelDistribution(apiKey string, days int) ([]ModelDistributionPoint, error) {
+func QueryModelDistribution(apiKey string, win TimeWindow) ([]ModelDistributionPoint, error) {
 	db := getDB()
 	if db == nil {
 		return nil, nil
 	}
-	if days < 1 {
-		days = 7
-	}
 
-	params := LogQueryParams{APIKey: apiKey, Days: days}
+	params := LogQueryParams{APIKey: apiKey, Window: &win}
 	where, args := buildWhereClause(params)
 
 	q := `SELECT model,
@@ -108,16 +102,13 @@ type APIKeyDistributionPoint struct {
 }
 
 // QueryAPIKeyDistribution returns request count and token usage grouped by api_key.
-func QueryAPIKeyDistribution(days int) ([]APIKeyDistributionPoint, error) {
+func QueryAPIKeyDistribution(win TimeWindow) ([]APIKeyDistributionPoint, error) {
 	db := getDB()
 	if db == nil {
 		return nil, nil
 	}
-	if days < 1 {
-		days = 7
-	}
 
-	params := LogQueryParams{Days: days}
+	params := LogQueryParams{Window: &win}
 	where, args := buildWhereClause(params)
 	currentByID := currentAPIKeyRowsByID()
 

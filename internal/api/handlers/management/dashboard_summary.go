@@ -55,8 +55,15 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		days = v
 	}
 
-	kpi, _ := usage.QueryDashboardKPI(days)
-	trends, _ := usage.QueryDashboardTrends(days)
+	// Custom [start,end) range takes precedence when both parse; otherwise fall
+	// back to the days-based window. A soft cap guards against runaway ranges.
+	win := usage.WindowFromDays(days)
+	if parsed, ok := usage.ParseTimeWindow(c.Query("start"), c.Query("end")); ok && parsed.SpanDays() <= 366 {
+		win = parsed
+	}
+
+	kpi, _ := usage.QueryDashboardKPI(win)
+	trends, _ := usage.QueryDashboardTrends(win)
 
 	c.JSON(http.StatusOK, gin.H{
 		"kpi": gin.H{
@@ -86,7 +93,7 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 		"meta": gin.H{
 			"generated_at": time.Now().UTC().Format(time.RFC3339),
 		},
-		"days": days,
+		"days": win.SpanDays(),
 	})
 }
 

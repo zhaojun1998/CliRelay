@@ -23,7 +23,7 @@ func TestQueryDashboardTrendsReturnsFixedDailyBuckets(t *testing.T) {
 		TotalTokens:  90,
 	}, "", "")
 
-	trends, err := QueryDashboardTrends(7)
+	trends, err := QueryDashboardTrends(WindowFromDays(7))
 	if err != nil {
 		t.Fatalf("QueryDashboardTrends() error = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestQueryDashboardTrendsReturnsRecentMinuteThroughputBuckets(t *testing.T) 
 		TotalTokens:  70,
 	}, "", "")
 
-	trends, err := QueryDashboardTrends(7)
+	trends, err := QueryDashboardTrends(WindowFromDays(7))
 	if err != nil {
 		t.Fatalf("QueryDashboardTrends() error = %v", err)
 	}
@@ -152,4 +152,45 @@ func findThroughputValues(t *testing.T, points []DashboardThroughputPoint, label
 	}
 	t.Fatalf("missing throughput point with label %q", label)
 	return 0, 0
+}
+
+func TestCustomWindowQueriesAreEndExclusive(t *testing.T) {
+	initTestUsageDB(t, config.RequestLogStorageConfig{StoreContent: false})
+
+	insert := func(ts time.Time) {
+		InsertLog("", "", "gpt-test", "codex", "codex", "auth-1", false, ts, 100, 20, TokenStats{
+			InputTokens:  10,
+			OutputTokens: 20,
+			TotalTokens:  30,
+		}, "", "")
+	}
+	insert(time.Date(2026, 6, 9, 23, 0, 0, 0, time.UTC))  // before start -> excluded
+	insert(time.Date(2026, 6, 10, 1, 0, 0, 0, time.UTC))  // in range
+	insert(time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)) // in range
+	insert(time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC))  // == end -> excluded (exclusive upper bound)
+
+	win := TimeWindow{
+		Start: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+	}
+
+	kpi, err := QueryDashboardKPI(win)
+	if err != nil {
+		t.Fatalf("QueryDashboardKPI() error = %v", err)
+	}
+	if kpi.TotalRequests != 2 {
+		t.Fatalf("KPI TotalRequests = %d, want 2 (end-exclusive range)", kpi.TotalRequests)
+	}
+
+	daily, err := QueryDailySeries("", win)
+	if err != nil {
+		t.Fatalf("QueryDailySeries() error = %v", err)
+	}
+	total := 0
+	for _, p := range daily {
+		total += p.Requests
+	}
+	if total != 2 {
+		t.Fatalf("daily series total requests = %d, want 2", total)
+	}
 }

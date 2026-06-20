@@ -390,9 +390,20 @@ func buildWhereClause(params LogQueryParams) (string, []interface{}) {
 	conditions := make([]string, 0, 4)
 	args := make([]interface{}, 0, 4)
 
-	// Time range: days=1 means "today", days=7 means "last 7 days", etc.
-	conditions = append(conditions, "timestamp >= ?")
-	args = append(args, CutoffStartUTC(params.Days).Format(time.RFC3339))
+	// Time range: an explicit Window takes precedence (supports custom [start,end)
+	// ranges); otherwise fall back to the days-based "last N days up to now".
+	if params.Window != nil {
+		startStr, endStr := params.Window.boundsForQuery()
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, startStr)
+		if endStr != "" {
+			conditions = append(conditions, "timestamp < ?")
+			args = append(args, endStr)
+		}
+	} else {
+		conditions = append(conditions, "timestamp >= ?")
+		args = append(args, CutoffStartUTC(params.Days).Format(time.RFC3339))
+	}
 
 	// API Key multi-value filter
 	if len(params.APIKeys) > 0 {
