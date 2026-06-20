@@ -86,12 +86,21 @@ func (s *Service) UsageChartData(apiKey string, win usage.TimeWindow) (map[strin
 		apikeyDist = []usage.APIKeyDistributionPoint{}
 	}
 
+	// Latency (TTFB) and throughput (tokens/sec) follow the selected window,
+	// unlike the real-time hourly series, so they are queried for both preset
+	// and custom ranges.
+	latencyThroughput, err := usage.QueryLatencyThroughput(apiKey, win)
+	if err != nil {
+		return nil, err
+	}
+
 	return map[string]any{
 		"daily_series":        daily,
 		"model_distribution":  models,
 		"hourly_tokens":       hourlyTokens,
 		"hourly_models":       hourlyModels,
 		"apikey_distribution": apikeyDist,
+		"latency_throughput":  latencyThroughput,
 	}, nil
 }
 

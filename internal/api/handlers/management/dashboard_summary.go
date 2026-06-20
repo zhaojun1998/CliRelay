@@ -64,20 +64,27 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 
 	kpi, _ := usage.QueryDashboardKPI(win)
 	trends, _ := usage.QueryDashboardTrends(win)
+	lt, _ := usage.QueryLatencyThroughput("", win)
 
 	c.JSON(http.StatusOK, gin.H{
 		"kpi": gin.H{
-			"total_requests":   kpi.TotalRequests,
-			"success_requests": kpi.SuccessRequests,
-			"failed_requests":  kpi.FailedRequests,
-			"success_rate":     kpi.SuccessRate,
-			"input_tokens":     kpi.InputTokens,
-			"output_tokens":    kpi.OutputTokens,
-			"reasoning_tokens": kpi.ReasoningTokens,
-			"cached_tokens":    kpi.CachedTokens,
-			"total_tokens":     kpi.TotalTokens,
-			"total_cost":       kpi.TotalCost,
-			"cache_rate":       kpi.CacheRate,
+			"total_requests":        kpi.TotalRequests,
+			"success_requests":      kpi.SuccessRequests,
+			"failed_requests":       kpi.FailedRequests,
+			"success_rate":          kpi.SuccessRate,
+			"input_tokens":          kpi.InputTokens,
+			"output_tokens":         kpi.OutputTokens,
+			"reasoning_tokens":      kpi.ReasoningTokens,
+			"cached_tokens":         kpi.CachedTokens,
+			"total_tokens":          kpi.TotalTokens,
+			"total_cost":            kpi.TotalCost,
+			"cache_rate":            kpi.CacheRate,
+			"avg_ttfb_ms":           lt.AvgTTFBMs,
+			"min_ttfb_ms":           lt.MinTTFBMs,
+			"max_ttfb_ms":           lt.MaxTTFBMs,
+			"tokens_per_second":     lt.TokensPerSecond,
+			"min_tokens_per_second": lt.MinTokensPerSecond,
+			"max_tokens_per_second": lt.MaxTokensPerSecond,
 		},
 		"counts": gin.H{
 			"api_keys":         apiKeyCount,
