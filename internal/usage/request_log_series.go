@@ -25,7 +25,7 @@ type ModelDistributionPoint struct {
 
 // QueryDailySeries returns per-day aggregated request count and token usage for a given API key.
 func QueryDailySeries(apiKey string, win TimeWindow) ([]DailySeriesPoint, error) {
-	db := getDB()
+	db := getReadDB()
 	if db == nil {
 		return nil, nil
 	}
@@ -62,7 +62,7 @@ func QueryDailySeries(apiKey string, win TimeWindow) ([]DailySeriesPoint, error)
 
 // QueryModelDistribution returns request count and token usage grouped by model for a given API key.
 func QueryModelDistribution(apiKey string, win TimeWindow) ([]ModelDistributionPoint, error) {
-	db := getDB()
+	db := getReadDB()
 	if db == nil {
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ type APIKeyDistributionPoint struct {
 
 // QueryAPIKeyDistribution returns request count and token usage grouped by api_key.
 func QueryAPIKeyDistribution(win TimeWindow) ([]APIKeyDistributionPoint, error) {
-	db := getDB()
+	db := getReadDB()
 	if db == nil {
 		return nil, nil
 	}
@@ -179,7 +179,7 @@ type HourlyModelPoint struct {
 
 // QueryHourlySeries returns per-hour token and model aggregates for the last N hours.
 func QueryHourlySeries(apiKey string, hours int) ([]HourlyTokenPoint, []HourlyModelPoint, error) {
-	db := getDB()
+	db := getReadDB()
 	if db == nil {
 		return nil, nil, nil
 	}
@@ -259,7 +259,7 @@ type EntityStatPoint struct {
 // QueryEntityStats returns aggregates grouped by a given column (e.g. "source" or "auth_index").
 // Time range is derived from days logic.
 func QueryEntityStats(apiKey string, days int, groupColumn string, entityNames []string) ([]EntityStatPoint, error) {
-	db := getDB()
+	db := getReadDB()
 	if db == nil {
 		return nil, nil
 	}
