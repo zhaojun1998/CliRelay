@@ -322,6 +322,26 @@ func (h *UsageLogsHandler) GetAuthFileTrend(c *gin.Context) {
 	c.JSON(status, payload)
 }
 
+// PostAuthFileWindowCost returns per-account request cost accumulated since each
+// quota window's start, so the portal can estimate a window's total budget from
+// "cost so far ÷ utilisation".
+func (h *UsageLogsHandler) PostAuthFileWindowCost(c *gin.Context) {
+	var req struct {
+		Items []managementusagelogs.AuthFileWindowCostItem `json:"items"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	costs, err := h.service().AuthFileWindowCost(req.Items)
+	if err != nil {
+		log.Warnf("management usage logs: auth file window cost failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"costs": costs})
+}
+
 func intQueryDefault(c *gin.Context, key string, def int) int {
 	return managementusagelogs.IntQueryDefault(c.Query(key), def)
 }

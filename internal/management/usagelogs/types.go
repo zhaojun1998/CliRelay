@@ -54,3 +54,18 @@ type AuthFileTrendResponse struct {
 	HourlyUsage       []usage.HourlyUsagePoint    `json:"hourly_usage"`
 	QuotaSeries       []usage.QuotaSnapshotSeries `json:"quota_series"`
 }
+
+// AuthFileWindowCostItem asks for one account's request cost since each quota
+// window's start. The portal supplies the start instant of every quota window
+// (5-hour, weekly, …) shown on a card; the service sums request cost from that
+// instant up to now so the UI can estimate a window's total budget from
+// "cost so far ÷ utilisation".
+type AuthFileWindowCostItem struct {
+	AuthIndex string                     `json:"auth_index"`
+	Windows   []AuthFileWindowCostWindow `json:"windows"`
+}
+
+type AuthFileWindowCostWindow struct {
+	Key   string `json:"key"`
+	Since string `json:"since"` // RFC3339, inclusive lower bound
+}

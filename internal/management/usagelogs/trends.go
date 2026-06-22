@@ -124,6 +124,44 @@ func (s *Service) AuthFileTrend(authIndex string, days int, hours int) (int, any
 	}
 }
 
+// AuthFileWindowCost returns, per auth_index, the request cost accumulated since
+// each supplied window start. It reuses the auth-subject cost semantics of
+// AuthFileTrend so a card's figure lines up with the detail modal's cycle cost.
+func (s *Service) AuthFileWindowCost(items []AuthFileWindowCostItem) (map[string]map[string]float64, error) {
+	result := make(map[string]map[string]float64, len(items))
+	for _, item := range items {
+		authIndex := strings.TrimSpace(item.AuthIndex)
+		if authIndex == "" {
+			continue
+		}
+		auth := s.authByIndex(authIndex)
+		if auth == nil {
+			continue
+		}
+		matcher := s.authSubjectMatcher(auth)
+		windowCosts := make(map[string]float64, len(item.Windows))
+		for _, w := range item.Windows {
+			key := strings.TrimSpace(w.Key)
+			if key == "" {
+				continue
+			}
+			since, err := time.Parse(time.RFC3339, strings.TrimSpace(w.Since))
+			if err != nil {
+				continue
+			}
+			cost, err := usage.QueryCostByAuthSubjectSince(matcher, since)
+			if err != nil {
+				return nil, err
+			}
+			windowCosts[key] = cost
+		}
+		if len(windowCosts) > 0 {
+			result[authIndex] = windowCosts
+		}
+	}
+	return result, nil
+}
+
 func fillDailyUsagePoints(points []usage.DailyUsagePoint, days int) []usage.DailyUsagePoint {
 	if days < 1 {
 		days = 7

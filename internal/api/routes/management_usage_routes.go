@@ -16,6 +16,7 @@ func registerManagementUsageRoutes(group *gin.RouterGroup, h *managementhandlers
 	group.GET("/usage/logs/:id/egress", h.GetUsageLogEgress)
 	group.GET("/usage/auth-file-group-trend", usageLogs.GetAuthFileGroupTrend)
 	group.GET("/usage/auth-file-trend", usageLogs.GetAuthFileTrend)
+	group.POST("/usage/auth-file-window-cost", usageLogs.PostAuthFileWindowCost)
 	group.POST("/usage/auth-file-quota-snapshot", h.PostAuthFileQuotaSnapshot)
 	group.GET("/usage/chart-data", usageLogs.GetUsageChartData)
 	group.GET("/usage/entity-stats", usageLogs.GetEntityUsageStats)
