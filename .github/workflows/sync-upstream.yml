@@ -32,6 +32,13 @@ jobs:
           git fetch upstream main
           before="$(git rev-parse HEAD)"
           git merge --no-edit FETCH_HEAD
+          # 保留 fork 自己的 .github/workflows，丢弃上游对其的任何增删改；
+          # 否则默认 GITHUB_TOKEN 无 workflows 权限，会拒绝推送整个 merge。
+          if ! git diff --quiet "$before" HEAD -- .github/workflows; then
+            git rm -rfq --ignore-unmatch .github/workflows
+            git checkout "$before" -- .github/workflows
+            git commit --amend --no-edit
+          fi
           after="$(git rev-parse HEAD)"
           git push origin HEAD:main
           if [ "$before" != "$after" ]; then
